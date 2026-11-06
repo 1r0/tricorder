@@ -10,10 +10,10 @@ const ACCOUNT_SUBSCRIPTION = "subscription";
 const ACCOUNT_FILE = ".claude.json";
 const PLAN_PRO = "claude_pro";
 const ACCOUNT_DIR_PREFIX = "tricorder-acct-";
-// Hand count for a subscription: 13 fields + "Enable all" = 14 options → 4, 4, 4, 2.
-// Pay per use has no 5h/7d fields but has spend: 11 fields + 1 = 12 options → 4, 4, 4.
-const SUBSCRIPTION = { fields: 13, optionCounts: [4, 4, 4, 2] } as const;
-const PAYG = { optionCounts: [4, 4, 4] } as const;
+// Hand count for a subscription: 14 fields + "Enable all" = 15 options → 4, 4, 4, 3.
+// Pay per use has no 5h/7d fields or email but has spend: 12 fields + 1 = 13 options → 4, 4, 4, 1 → the single one borrows: 4, 4, 3, 2.
+const SUBSCRIPTION = { fields: 14, optionCounts: [4, 4, 4, 3] } as const;
+const PAYG = { optionCounts: [4, 4, 3, 2] } as const;
 const DESCRIBE = "describe";
 const QUESTIONS = "questions";
 
@@ -127,8 +127,8 @@ test("fields questions: for a subscription gives 3 questions (4, 4, 3, 2 options
 const QUESTION_LABELS_IN_ORDER = [
   "Enable all", "Mute icon", "Location", "Uncommitted changes",
   "Pull requests", "Context window", "Model", "5-hour usage",
-  "7-day usage", "Plan link", "Account email", "Other worktrees",
-  "Sub-agents", "Start-up animation",
+  "7-day usage", "Remote Control", "Plan link", "Account email",
+  "Other worktrees", "Sub-agents", "Start-up animation",
 ];
 
 test("fields questions: options are listed in the order the statusline draws the fields", () => {
@@ -143,12 +143,14 @@ const PREVIEW_LINE_1_START = "🔇 🌳 fix-login* (#12) · 🔋 42% · Opus 5.5
 const PREVIEW_LINE_1_END = "🗺️ plan  you@example.com";
 const PREVIEW_LINES = ["add-tests (#13)", "🤖 Explore Opus 4.8, review Sonnet 5"];
 const PREVIEW_SHIP = "o≡≡≡>";
+const PREVIEW_REMOTE = "· 📡 remote";
 
 test("fields preview: with every field on, all ten fields are drawn, in catalogue order", () => {
   const box = sandbox();
   const lines = run(box, ["fields", "preview"]).stdout.trimEnd().split("\n");
   assert.ok(lines[0]?.startsWith(PREVIEW_LINE_1_START));
   assert.ok(lines[0]?.endsWith(PREVIEW_LINE_1_END));
+  assert.ok(lines[0]?.includes(PREVIEW_REMOTE));
   assert.deepEqual(lines.slice(1, PREVIEW_LINES.length + 1), PREVIEW_LINES);
   assert.ok(lines[PREVIEW_LINES.length + 1]?.startsWith(PREVIEW_SHIP));
 });

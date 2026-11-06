@@ -49,7 +49,8 @@ const SPEND_LEGEND =
 // Order here is the order the fields appear on the statusline, left to right,
 // then top to bottom (line 1: mute icon, location with its uncommitted-changes
 // mark and PR tags, context,
-// model, 5-hour and 7-day usage or monthly spend, plan link and account email
+// model, 5-hour and 7-day usage or monthly spend, Remote Control marker, plan link
+// and account email
 // at the right edge; then the other-worktrees line, then the
 // sub-agents line). The start-up animation comes last: it only shows for the
 // first seconds. Setup lists the fields in this same order.
@@ -142,6 +143,16 @@ export const FIELDS = [
     sample: "💰 $62/$200 🐕 31%   (no budget set: 💰 $62)",
     legend: SPEND_LEGEND,
     appliesTo: PAYG_ONLY,
+    defaultOn: true,
+  },
+  {
+    id: "remote",
+    name: "Remote Control",
+    line: "main",
+    shows: "A marker while Remote Control is on for this session, so you know it can be reached from another device.",
+    sample: "📡 remote",
+    legend: "📡 = Remote Control is on. Read from Claude Code's own session file; if that cannot be read, nothing is shown.",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true,
   },
   {

@@ -170,6 +170,12 @@ Accounts that pay per use (an API key or a cloud-provider login) have no 5-hour 
 - **It is an estimate, not your invoice.** It misses sessions that run without a statusline (for example `claude -p`), other machines, other tools using the same key, anything spent before tricorder was installed, and it is Claude Code's own estimate of cost. Check the Console for the real figure.
 - Claude Code also reports a cost on subscription accounts, but that is not money you pay per use, so the spend field is only shown to pay-per-use accounts (or when the account type cannot be told and the payload has no usage limits).
 
+### Remote Control marker
+
+While Remote Control is on for a session, the first line shows `📡 remote`, so you know that session can be reached from another device. Claude Code does not put this in the statusline data. It records it in its own per-session file, `sessions/<pid>.json` in the account's config folder (`$CLAUDE_CONFIG_DIR`, else `~/.claude`), as a `bridgeSessionId` that is text while Remote Control is on and null otherwise. Tricorder finds this session's record by its `sessionId`.
+
+Those files are internal to Claude Code and not a documented interface, and ones from processes that have ended can be left behind. So a record only counts while its process is still running, and if several match, the newest one decides. If the folder or file cannot be read, or looks different, nothing is shown. Switch the `remote` field off if you do not want the marker.
+
 ### Account email
 
 On a subscription account the statusline can show the email you are signed in with, in grey at the right edge of the first line (after the plan link): handy when you run a personal and a work account side by side. Claude Code does not send the email to the statusline, so it is read from the account's own file, `$CLAUDE_CONFIG_DIR/.claude.json` (or `~/.claude.json` when that variable is not set). That file is internal to Claude Code and may change; if the email cannot be found, nothing is shown.
@@ -187,7 +193,7 @@ tricorder fields set context,model   # show only these two; everything else off
 tricorder fields set all             # show everything again
 ```
 
-The choice is stored in `~/.claude/tricorder/config.json` under `statusline.fields`. All fields are on by default, so nothing changes until you choose. Field ids, in the order they appear on the statusline: `muteIcon`, `location`, `dirty`, `prs`, `context`, `model`, `usage5h`, `usage7d`, `spend`, `plan`, `account`, `worktrees`, `subagents`, `intro`.
+The choice is stored in `~/.claude/tricorder/config.json` under `statusline.fields`. All fields are on by default, so nothing changes until you choose. Field ids, in the order they appear on the statusline: `muteIcon`, `location`, `dirty`, `prs`, `context`, `model`, `usage5h`, `usage7d`, `spend`, `remote`, `plan`, `account`, `worktrees`, `subagents`, `intro`.
 
 `statusline.mode` is `auto` (default: detect the account type from Claude Code's own `.claude.json`), or `subscription` / `payg` to force it. The detection reads a Claude Code internal file; if that file moves or cannot be read, the type is `unknown` and every field is offered.
 

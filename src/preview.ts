@@ -25,7 +25,7 @@ const CURRENT_PR_NUMBER = 12;
 const OTHER_PR_NUMBER = 13;
 const CONTEXT_USED_PCT = 42;
 const MODEL_NAME = "Opus 5.5";
-const PREVIEW_COLUMNS = "100"; // width the plan link is pushed to the right edge of
+const PREVIEW_COLUMNS = "120"; // width the plan link is pushed to the right edge of
 const RENDER_TIMEOUT_MS = 10_000;
 const MS_PER_S = 1000;
 // Made-up usage so both limits show a pace: 5h is 40% gone with 37% used (3 points
@@ -60,6 +60,15 @@ function makeDirtyFolder(path: string): void {
   }
 }
 
+// Claude Code's own record for a session with Remote Control on, in the throwaway home:
+// this process stands in for the running Claude Code process.
+function seedRemoteControl(): void {
+  const dir = join(homedir(), ".claude", "sessions");
+  mkdirSync(dir, { recursive: true });
+  const record = { pid: process.pid, sessionId: SESSION, bridgeSessionId: "example", updatedAt: Date.now() };
+  writeFileSync(join(dir, process.pid + ".json"), JSON.stringify(record));
+}
+
 // The made-up session: one branch with a PR and uncommitted changes, one other
 // worktree with a PR, two running sub-agents and a plan file.
 function seedSession(): void {
@@ -69,6 +78,7 @@ function seedSession(): void {
   addSubagent(SESSION, "a", { type: "Explore", desc: "", model: "Opus 4.8", startedAt: 0 });
   addSubagent(SESSION, "b", { type: "review", desc: "", model: "Sonnet 5", startedAt: 0 });
   setPlan(SESSION, join(exampleDir(), "plan.md"));
+  seedRemoteControl();
 }
 
 // What this month would have cost at an even pace through the budget, to the cent.

@@ -13,6 +13,7 @@ import {
 } from "./state";
 import { detectAccount, readAccountEmail, resolveType } from "./account";
 import { currentBranch, isDirty } from "./git";
+import { remoteActive } from "./remote";
 import { budgetBand, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, type PaceConfig } from "./pace";
 import { monthElapsedPct, monthSpendUsd, recordCost } from "./spend";
 
@@ -135,6 +136,7 @@ const ICON_MAP = "🗺️";
 const ICON_CTX = "🔋";
 const ICON_ROBOT = "🤖";
 const ICON_MONEY = "💰";
+const ICON_REMOTE = "📡";
 const SEP = " · ";
 const MARGIN = 1;
 // Columns kept empty at the right edge when the account email is shown: the terminal
@@ -306,6 +308,7 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
     on.usage5h ? usageSegment("5h", p.rate_limits?.five_hour, FIVE_HOUR_WINDOW_S, nowS, cfg.statusline.pace) : null,
     on.usage7d ? usageSegment("7d", p.rate_limits?.seven_day, SEVEN_DAY_WINDOW_S, nowS, cfg.statusline.pace) : null,
     on.spend && spendApplies(cfg, p) ? spendSegment(session, p.cost, cfg.statusline.budget.monthlyUsd, cfg.statusline.pace, nowS * MS_PER_S) : null,
+    on.remote && remoteActive(session) ? ICON_REMOTE + " remote" : null,
   ]
     .filter((s): s is string => s !== null && s !== "")
     .join(SEP);
