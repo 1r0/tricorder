@@ -74,7 +74,7 @@ Effective config lives at `~/.claude/tricorder/config.json`, seeded on first run
   "muted": true,
   "worktreeClick": "open",
   "statusline": {
-    "fields": { "location": true, "prs": true, "context": true, "model": true, "muteIcon": true,
+    "fields": { "muteIcon": true, "location": true, "prs": true, "context": true, "model": true,
                 "plan": true, "worktrees": true, "subagents": true, "intro": true }
   },
   "sounds": {

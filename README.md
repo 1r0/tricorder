@@ -150,7 +150,7 @@ tricorder fields set context,model   # show only these two; everything else off
 tricorder fields set all             # show everything again
 ```
 
-The choice is stored in `~/.claude/tricorder/config.json` under `statusline.fields`. Field ids: `location`, `prs`, `context`, `model`, `muteIcon`, `plan`, `worktrees`, `subagents`, `intro`. An old config without this block keeps every field on.
+The choice is stored in `~/.claude/tricorder/config.json` under `statusline.fields`. Field ids, in the order they appear on the statusline: `muteIcon`, `location`, `prs`, `context`, `model`, `plan`, `worktrees`, `subagents`, `intro`. An old config without this block keeps every field on.
 
 ## CLI reference
 

@@ -9,6 +9,14 @@ test("catalogue: ids are unique and every field is on by default", () => {
   assert.ok(Object.values(defaultFields()).every((v) => v === true));
 });
 
+// The order the fields are drawn on line 1 of the statusline, left to right.
+const LINE_1_ORDER = ["muteIcon", "location", "prs", "context", "model", "plan"];
+
+test("catalogue: fields are listed in the order the statusline draws them", () => {
+  assert.deepEqual(FIELD_IDS.slice(0, LINE_1_ORDER.length), LINE_1_ORDER);
+  assert.deepEqual(FIELD_IDS.slice(LINE_1_ORDER.length), ["worktrees", "subagents", "intro"]);
+});
+
 test("catalogue: every field is explained (shows + sample are not empty)", () => {
   FIELDS.forEach((f) => {
     assert.notEqual(f.shows.trim(), "", f.id);

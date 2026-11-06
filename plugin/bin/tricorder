@@ -23,6 +23,14 @@ var import_node_fs2 = require("node:fs");
 // src/fields.ts
 var FIELDS = [
   {
+    id: "muteIcon",
+    name: "Mute icon",
+    shows: "A speaker icon at the start of the line while sounds are muted.",
+    sample: "\u{1F507}",
+    legend: "\u{1F507} = sounds are muted.",
+    defaultOn: true
+  },
+  {
     id: "location",
     name: "Location",
     shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
@@ -52,14 +60,6 @@ var FIELDS = [
     shows: "The name of the model this session is using.",
     sample: "Opus 5.5",
     legend: "",
-    defaultOn: true
-  },
-  {
-    id: "muteIcon",
-    name: "Mute icon",
-    shows: "A speaker icon at the start of the line while sounds are muted.",
-    sample: "\u{1F507}",
-    legend: "\u{1F507} = sounds are muted.",
     defaultOn: true
   },
   {

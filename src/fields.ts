@@ -16,8 +16,20 @@ export interface FieldInfo {
   readonly defaultOn: boolean;
 }
 
-// Order here is the order setup lists them in.
+// Order here is the order the fields appear on the statusline, left to right,
+// then top to bottom (line 1: mute icon, location with its PR tags, context,
+// model, plan link at the right edge; then the other-worktrees line, then the
+// sub-agents line). The start-up animation comes last: it only shows for the
+// first seconds. Setup lists the fields in this same order.
 export const FIELDS = [
+  {
+    id: "muteIcon",
+    name: "Mute icon",
+    shows: "A speaker icon at the start of the line while sounds are muted.",
+    sample: "🔇",
+    legend: "🔇 = sounds are muted.",
+    defaultOn: true,
+  },
   {
     id: "location",
     name: "Location",
@@ -48,14 +60,6 @@ export const FIELDS = [
     shows: "The name of the model this session is using.",
     sample: "Opus 5.5",
     legend: "",
-    defaultOn: true,
-  },
-  {
-    id: "muteIcon",
-    name: "Mute icon",
-    shows: "A speaker icon at the start of the line while sounds are muted.",
-    sample: "🔇",
-    legend: "🔇 = sounds are muted.",
     defaultOn: true,
   },
   {
