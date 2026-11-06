@@ -22,7 +22,7 @@ export function writeConfig(box: Sandbox, config: unknown): void {
   writeFileSync(box.configFile, JSON.stringify(config));
 }
 
-export function readConfig(box: Sandbox): { statusline: { fields: Record<string, boolean> } } {
+export function readConfig(box: Sandbox): { statusline: { fields: Record<string, boolean>; mode: string } } {
   return JSON.parse(readFileSync(box.configFile, "utf8"));
 }
 
@@ -32,8 +32,12 @@ export interface RunResult {
   readonly status: number | null;
 }
 
-export function run(box: Sandbox, args: readonly string[], opts: { stdin?: string } = {}): RunResult {
-  const env = { PATH: process.env.PATH ?? "", HOME: box.home };
+export function run(box: Sandbox, args: readonly string[], opts: { stdin?: string; configDir?: string } = {}): RunResult {
+  const env = {
+    PATH: process.env.PATH ?? "",
+    HOME: box.home,
+    ...(opts.configDir === undefined ? {} : { CLAUDE_CONFIG_DIR: opts.configDir }),
+  };
   const r = spawnSync("node", [CLI, ...args], { env, input: opts.stdin ?? "", encoding: "utf8" });
   return { stdout: r.stdout, stderr: r.stderr, status: r.status };
 }

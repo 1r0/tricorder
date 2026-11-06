@@ -21,77 +21,100 @@ var import_node_path = require("node:path");
 var import_node_fs2 = require("node:fs");
 
 // src/fields.ts
+var ACCOUNT_MODES = ["auto", "subscription", "payg"];
+function isAccountMode(value) {
+  return ACCOUNT_MODES.includes(value);
+}
+var EVERY_ACCOUNT = ["subscription", "payg"];
 var FIELDS = [
   {
     id: "muteIcon",
     name: "Mute icon",
+    line: "main",
     shows: "A speaker icon at the start of the line while sounds are muted.",
     sample: "\u{1F507}",
     legend: "\u{1F507} = sounds are muted.",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   },
   {
     id: "location",
     name: "Location",
+    line: "main",
     shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
     sample: "my-repo(main)   or   \u{1F333} fix-login",
     legend: "Clicking opens the folder, copies the path, or both (see worktreeClick in the config).",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   },
   {
     id: "prs",
     name: "Pull requests",
+    line: "main",
     shows: "A clickable tag for each pull request this session opened from the current branch.",
     sample: "(#12)",
     legend: "Cyan.",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   },
   {
     id: "context",
     name: "Context window",
+    line: "main",
     shows: "How full the model's context window is.",
     sample: "\u{1F50B} 42%",
     legend: "\u{1F50B} = context window. Green below 70%, yellow 70-89%, red from 90%.",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   },
   {
     id: "model",
     name: "Model",
+    line: "main",
     shows: "The name of the model this session is using.",
     sample: "Opus 5.5",
     legend: "",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   },
   {
     id: "plan",
     name: "Plan link",
+    line: "main",
     shows: "A link to the current plan file, at the right edge, once the session has one.",
     sample: "\u{1F5FA}\uFE0F plan",
     legend: "\u{1F5FA}\uFE0F = plan file. Grey text.",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   },
   {
     id: "worktrees",
     name: "Other worktrees",
+    line: "worktrees",
     shows: "A second line listing the other worktrees this session has visited, each with its pull requests.",
     sample: "fix-login (#12)  add-tests",
     legend: "",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   },
   {
     id: "subagents",
     name: "Sub-agents",
+    line: "subagents",
     shows: "A line listing the sub-agents running right now, with the model each one uses.",
     sample: "\u{1F916} Explore Opus 4.8, review Sonnet 5",
     legend: "\u{1F916} = sub-agents. Model names in grey.",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   },
   {
     id: "intro",
     name: "Start-up animation",
+    line: "intro",
     shows: "A small ship that crosses the line for the first 4 seconds of a session.",
     sample: "o\u2261\u2261\u2261>",
     legend: "Cyan.",
+    appliesTo: EVERY_ACCOUNT,
     defaultOn: true
   }
 ];
@@ -101,6 +124,9 @@ function isFieldId(value) {
 }
 function defaultFields() {
   return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn]));
+}
+function fieldsFor(type) {
+  return FIELDS.filter((f) => type === "unknown" || f.appliesTo.includes(type));
 }
 
 // src/config.ts
@@ -122,7 +148,7 @@ var DEFAULT_CONFIG = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields() },
+  statusline: { fields: defaultFields(), mode: "auto" },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -162,7 +188,7 @@ function mergeStatusline(base, override) {
   const fields2 = Object.fromEntries(
     FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]])
   );
-  return { fields: fields2 };
+  return { fields: fields2, mode: isAccountMode(override?.mode) ? override.mode : base.mode };
 }
 function mergeConfig(base, override) {
   const events = Object.keys(base.sounds);
@@ -469,8 +495,11 @@ function charWidth(ch) {
   if (cp === VS16) return 0;
   return cp >= WIDE_MIN ? WIDE_WIDTH : NARROW_WIDTH;
 }
+function plainText(s) {
+  return s.replace(OSC8_RE, "").replace(SGR_RE, "");
+}
 function visWidth(s) {
-  const clean = s.replace(OSC8_RE, "").replace(SGR_RE, "");
+  const clean = plainText(s);
   return [...clean].reduce((w, ch) => w + charWidth(ch), 0);
 }
 var ICON_MUTED = "\u{1F507}";
@@ -1171,11 +1200,149 @@ function worktreeClick(arg) {
   process.stdout.write(mode + "\n");
 }
 
+// src/account.ts
+var import_node_fs8 = require("node:fs");
+var import_node_path8 = require("node:path");
+var UNKNOWN_ACCOUNT = { type: "unknown", plan: null, extraUsage: false };
+function classify(parsed) {
+  if (typeof parsed !== "object" || parsed === null) return UNKNOWN_ACCOUNT;
+  const oauth = parsed.oauthAccount;
+  if (typeof oauth !== "object" || oauth === null) return { type: "payg", plan: null, extraUsage: false };
+  const account = oauth;
+  return {
+    type: "subscription",
+    plan: typeof account.organizationType === "string" ? account.organizationType : null,
+    extraUsage: account.hasExtraUsageEnabled === true
+  };
+}
+function accountFilePath() {
+  const dir = process.env.CLAUDE_CONFIG_DIR;
+  if (dir !== void 0 && dir !== "") return (0, import_node_path8.join)(dir, ".claude.json");
+  const home = process.env.HOME;
+  return home === void 0 || home === "" ? null : (0, import_node_path8.join)(home, ".claude.json");
+}
+function detectAccount() {
+  const file = accountFilePath();
+  if (file === null) return UNKNOWN_ACCOUNT;
+  try {
+    return classify(JSON.parse((0, import_node_fs8.readFileSync)(file, "utf8")));
+  } catch {
+    return UNKNOWN_ACCOUNT;
+  }
+}
+function resolveType(mode, detected) {
+  return mode === "auto" ? detected : mode;
+}
+
+// src/preview.ts
+var import_node_child_process4 = require("node:child_process");
+var import_node_fs9 = require("node:fs");
+var import_node_os2 = require("node:os");
+var import_node_path9 = require("node:path");
+var SESSION = "preview";
+var EXAMPLE_DIR = "/example";
+var EXAMPLE_PR_URL = "https://example.invalid/pull/";
+var CURRENT_BRANCH = "fix-login";
+var OTHER_BRANCH = "add-tests";
+var CURRENT_PR_NUMBER = 12;
+var OTHER_PR_NUMBER = 13;
+var CONTEXT_USED_PCT = 42;
+var MODEL_NAME = "Opus 5.5";
+var PREVIEW_COLUMNS = "72";
+var RENDER_TIMEOUT_MS = 1e4;
+function seedSession() {
+  addPR(SESSION, { number: CURRENT_PR_NUMBER, url: EXAMPLE_PR_URL + CURRENT_PR_NUMBER, branch: CURRENT_BRANCH });
+  addPR(SESSION, { number: OTHER_PR_NUMBER, url: EXAMPLE_PR_URL + OTHER_PR_NUMBER, branch: OTHER_BRANCH });
+  addWorktree(SESSION, { path: (0, import_node_path9.join)(EXAMPLE_DIR, OTHER_BRANCH), branch: OTHER_BRANCH });
+  addSubagent(SESSION, "a", { type: "Explore", desc: "", model: "Opus 4.8", startedAt: 0 });
+  addSubagent(SESSION, "b", { type: "review", desc: "", model: "Sonnet 5", startedAt: 0 });
+  setPlan(SESSION, (0, import_node_path9.join)(EXAMPLE_DIR, "plan.md"));
+}
+function renderPreviewSession() {
+  seedSession();
+  const path = (0, import_node_path9.join)(EXAMPLE_DIR, CURRENT_BRANCH);
+  renderStatusline(
+    JSON.stringify({
+      session_id: SESSION,
+      cwd: path,
+      worktree: { path, name: CURRENT_BRANCH, branch: CURRENT_BRANCH },
+      model: { display_name: MODEL_NAME },
+      context_window: { used_percentage: CONTEXT_USED_PCT }
+    })
+  );
+}
+function previewFields() {
+  const cfg = loadConfig();
+  const home = (0, import_node_fs9.mkdtempSync)((0, import_node_path9.join)((0, import_node_os2.tmpdir)(), "tricorder-preview-"));
+  try {
+    const dir = (0, import_node_path9.join)(home, ".claude", "tricorder");
+    (0, import_node_fs9.mkdirSync)(dir, { recursive: true });
+    const fields2 = { ...cfg.statusline.fields, intro: false };
+    (0, import_node_fs9.writeFileSync)((0, import_node_path9.join)(dir, "config.json"), serialize({ ...cfg, muted: true, statusline: { ...cfg.statusline, fields: fields2 } }));
+    const drawn = (0, import_node_child_process4.execFileSync)(process.execPath, [process.argv[1] ?? "", "fields", "preview-render"], {
+      env: { PATH: process.env.PATH ?? "", HOME: home, COLUMNS: PREVIEW_COLUMNS },
+      encoding: "utf8",
+      timeout: RENDER_TIMEOUT_MS
+    });
+    const intro = FIELDS.find((f) => f.id === "intro");
+    const note = cfg.statusline.fields.intro && intro ? [intro.sample + "   (crosses the line for the first seconds of a session)"] : [];
+    process.stdout.write([plainText(drawn).trimEnd(), ...note].join("\n") + "\n");
+  } finally {
+    (0, import_node_fs9.rmSync)(home, { recursive: true, force: true });
+  }
+}
+
+// src/questions.ts
+var ENABLE_ALL_LABEL = "Enable all";
+var OPTIONS_PER_QUESTION = 4;
+var QUESTIONS_PER_CALL = 4;
+var MIN_OPTIONS = 2;
+var HEADER_MAX_CHARS = 12;
+function firstSentence(text) {
+  const end = text.indexOf(". ");
+  return end === -1 ? text : text.slice(0, end + 1);
+}
+function pieces(items, size) {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
+}
+function chunk(items) {
+  const groups = pieces(items, OPTIONS_PER_QUESTION);
+  const lastIndex = groups.length - 1;
+  const last = groups[lastIndex];
+  const before = groups[lastIndex - 1];
+  if (last === void 0 || before === void 0 || last.length >= MIN_OPTIONS) return groups;
+  return [...groups.slice(0, lastIndex - 1), before.slice(0, -1), [...before.slice(-1), ...last]];
+}
+function buildQuestionCalls(fields2) {
+  const options = [
+    { label: ENABLE_ALL_LABEL, description: "Turn on every field listed." },
+    ...fields2.map((f) => ({ label: f.name, description: firstSentence(f.shows) }))
+  ];
+  const groups = chunk(options);
+  const questions = groups.map((group, i) => ({
+    question: `Tick the fields you want to see (part ${i + 1} of ${groups.length}). Anything you leave unticked is turned off. Tick at least one; to start over, tick ${ENABLE_ALL_LABEL}.`,
+    header: `Fields ${i + 1}`.slice(0, HEADER_MAX_CHARS),
+    multiSelect: true,
+    options: group
+  }));
+  return pieces(questions, QUESTIONS_PER_CALL);
+}
+
 // src/fieldscmd.ts
 var ALL = "all";
-function describeFields() {
+function parseType(arg, fallback) {
+  return arg === "subscription" || arg === "payg" || arg === "unknown" ? arg : fallback;
+}
+function detect() {
   const cfg = loadConfig();
-  const out = FIELDS.map((f) => ({
+  const detected = detectAccount();
+  const type = resolveType(cfg.statusline.mode, detected.type);
+  process.stdout.write(JSON.stringify({ ...detected, type, mode: cfg.statusline.mode }) + "\n");
+}
+function describeFields(typeArg) {
+  const cfg = loadConfig();
+  const type = parseType(typeArg, resolveType(cfg.statusline.mode, detectAccount().type));
+  const out = fieldsFor(type).map((f) => ({
     id: f.id,
     name: f.name,
     shows: f.shows,
@@ -1183,7 +1350,14 @@ function describeFields() {
     legend: f.legend,
     enabled: cfg.statusline.fields[f.id]
   }));
-  process.stdout.write(serialize({ fields: out }));
+  process.stdout.write(serialize({ type, fields: out }));
+}
+function questionsFor(typeArg) {
+  const cfg = loadConfig();
+  const type = parseType(typeArg, resolveType(cfg.statusline.mode, detectAccount().type));
+  const list = fieldsFor(type);
+  const labels = Object.fromEntries(list.map((f) => [f.name, f.id]));
+  process.stdout.write(serialize({ enableAllLabel: ENABLE_ALL_LABEL, labels, calls: buildQuestionCalls(list) }));
 }
 function parseFieldList(arg) {
   if (arg.trim().toLowerCase() === ALL) return { ids: FIELD_IDS, unknown: [] };
@@ -1203,14 +1377,17 @@ function setFields(arg) {
   }
   const cfg = loadConfig();
   const fields2 = Object.fromEntries(FIELDS.map((f) => [f.id, ids.includes(f.id)]));
-  saveConfig({ ...cfg, statusline: { fields: fields2 } });
+  saveConfig({ ...cfg, statusline: { ...cfg.statusline, fields: fields2 } });
   log("fields set \u2192 " + ids.join(","));
   process.stdout.write("on: " + ids.join(", ") + "\n");
 }
 function fields(sub, arg) {
-  if (sub === "describe") return describeFields();
+  if (sub === "describe") return describeFields(arg);
+  if (sub === "questions") return questionsFor(arg);
+  if (sub === "preview") return previewFields();
+  if (sub === "preview-render") return renderPreviewSession();
   if (sub === "set") return setFields(arg);
-  process.stderr.write("usage: tricorder fields describe | fields set <id,id,...|all>\n");
+  process.stderr.write("usage: tricorder fields describe [type] | fields questions [type] | fields preview | fields set <id,id,...|all>\n");
   process.exitCode = 1;
 }
 
@@ -1226,6 +1403,7 @@ var COMMANDS = {
   sound: () => playSound(process.argv[ARG_INDEX], readStdin()),
   mute: () => mute(process.argv[ARG_INDEX]),
   "worktree-click": () => worktreeClick(process.argv[ARG_INDEX]),
+  detect: () => detect(),
   fields: () => fields(process.argv[ARG_INDEX], process.argv[ARG2_INDEX]),
   warp: () => warp(),
   logs: () => showLogs(process.argv[ARG_INDEX]),

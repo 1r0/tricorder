@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { defaultFields, FIELD_IDS, type FieldId } from "./fields";
+import { defaultFields, isAccountMode, FIELD_IDS, type AccountMode, type FieldId } from "./fields";
 
 const JSON_INDENT = 2;
 
@@ -35,9 +35,12 @@ export function isWorktreeClickMode(value: unknown): value is WorktreeClickMode 
   return (WORKTREE_CLICK_MODES as readonly unknown[]).includes(value);
 }
 
-// Which statusline fields are drawn (see src/fields.ts for the list).
+// Which statusline fields are drawn (see src/fields.ts for the list), and how
+// the account type is decided.
 export interface StatuslineConfig {
   readonly fields: Record<FieldId, boolean>;
+  // "auto" detects the account type; the other two force it.
+  readonly mode: AccountMode;
 }
 
 export interface Config {
@@ -52,7 +55,7 @@ export const DEFAULT_CONFIG: Config = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields() },
+  statusline: { fields: defaultFields(), mode: "auto" },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -97,7 +100,7 @@ function mergeStatusline(base: StatuslineConfig, override: Partial<StatuslineCon
   const fields = Object.fromEntries(
     FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]] as const),
   ) as Record<FieldId, boolean>;
-  return { fields };
+  return { fields, mode: isAccountMode(override?.mode) ? override.mode : base.mode };
 }
 
 export function mergeConfig(base: Config, override: Partial<Config>): Config {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defaultFields, FIELD_IDS, FIELDS, isFieldId } from "../src/fields";
+import { defaultFields, FIELD_IDS, FIELDS, fieldsFor, isFieldId } from "../src/fields";
 import { mergeConfig, DEFAULT_CONFIG } from "../src/config";
 import { parseFieldList } from "../src/fieldscmd";
 
@@ -22,6 +22,10 @@ test("catalogue: every field is explained (shows + sample are not empty)", () =>
     assert.notEqual(f.shows.trim(), "", f.id);
     assert.notEqual(f.sample.trim(), "", f.id);
   });
+});
+
+test("fieldsFor: an undetected account is offered every field", () => {
+  assert.equal(fieldsFor("unknown").length, FIELDS.length);
 });
 
 test("isFieldId accepts catalogue ids only", () => {
@@ -49,13 +53,20 @@ test("parseFieldList: empty text gives nothing", () => {
 test("mergeConfig: an old config with no statusline block gets every default", () => {
   const merged = mergeConfig(DEFAULT_CONFIG, { muted: false });
   assert.deepEqual(merged.statusline.fields, defaultFields());
+  assert.equal(merged.statusline.mode, "auto");
 });
 
 test("mergeConfig: keeps valid switches, ignores unknown ids and non-booleans", () => {
   const merged = mergeConfig(DEFAULT_CONFIG, {
-    statusline: { fields: { context: false, model: "yes", bogus: true } },
+    statusline: { fields: { context: false, model: "yes", bogus: true }, mode: "payg" },
   } as never);
   assert.equal(merged.statusline.fields.context, false);
   assert.equal(merged.statusline.fields.model, true); // "yes" is not a boolean: default kept
   assert.equal("bogus" in merged.statusline.fields, false);
+  assert.equal(merged.statusline.mode, "payg");
+});
+
+test("mergeConfig: an invalid mode falls back to auto", () => {
+  const merged = mergeConfig(DEFAULT_CONFIG, { statusline: { fields: {}, mode: "gold" } } as never);
+  assert.equal(merged.statusline.mode, "auto");
 });

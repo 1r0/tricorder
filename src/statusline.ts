@@ -99,8 +99,12 @@ function charWidth(ch: string): number {
   if (cp === VS16) return 0;
   return cp >= WIDE_MIN ? WIDE_WIDTH : NARROW_WIDTH;
 }
+// The text as it looks on screen: colour codes and link wrappers removed.
+export function plainText(s: string): string {
+  return s.replace(OSC8_RE, "").replace(SGR_RE, "");
+}
 function visWidth(s: string): number {
-  const clean = s.replace(OSC8_RE, "").replace(SGR_RE, "");
+  const clean = plainText(s);
   return [...clean].reduce((w, ch) => w + charWidth(ch), 0);
 }
 
