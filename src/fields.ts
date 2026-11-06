@@ -39,7 +39,7 @@ const SUBSCRIPTION_ONLY: readonly AccountType[] = [SUBSCRIPTION];
 
 // Shared by the usage fields: what the animal and the colour of the percentage mean.
 const PACE_LEGEND =
-  "The animal and the colour compare your use with the time gone in the window: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = limit reached. No animal in the first 3% of a window. (Margin and 3% are settings: statusline.pace.)";
+  "The animal and the colour compare your use with the time gone in the window: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = limit reached. In the first 3% of a window it is too early to tell, so a 🦥 sloth (grey) shows instead. (Margin and 3% are settings: statusline.pace.)";
 
 // Order here is the order the fields appear on the statusline, left to right,
 // then top to bottom (line 1: mute icon, location with its uncommitted-changes

@@ -6,7 +6,7 @@
 // Pure functions only, so the numbers can be checked by hand (see
 // test/pace.test.ts). This file must not import from config.ts.
 
-export type PaceBand = "chill" | "onTrack" | "watchOut" | "hot" | "over";
+export type PaceBand = "early" | "chill" | "onTrack" | "watchOut" | "hot" | "over";
 
 export interface PaceStyle {
   readonly name: string;
@@ -17,8 +17,10 @@ export interface PaceStyle {
 
 // Names and colours follow the bands of Claude's own Pacing Sensitivity screen
 // (Chill, On track, Watch out, Hot). "Over" is added for a limit that is used up
-// (or, for spend, a budget that is exceeded).
+// (or, for spend, a budget that is exceeded), and "Just started" (the sloth) for
+// the first moments of a window, when a pace would mean nothing.
 export const PACE_STYLES = {
+  early: { name: "Just started", color: 90, icon: "🦥" }, // grey: too early in the window to tell
   chill: { name: "Chill", color: 32, icon: "🐢" }, // green
   onTrack: { name: "On track", color: 94, icon: "🐕" }, // blue
   watchOut: { name: "Watch out", color: "38;5;214", icon: "🐎" }, // orange
@@ -30,7 +32,8 @@ export interface PaceConfig {
   // Width of the "On track" band, in percentage points either side of even pace.
   // Default 10: the default of Claude's Pacing Sensitivity screen.
   readonly marginPts: number;
-  // Below this share of the window gone, the pace is too noisy to mean anything.
+  // Below this share of the window gone, the pace is too noisy to mean anything:
+  // the sloth shows instead of a pace animal.
   readonly minElapsedPct: number;
 }
 
@@ -53,7 +56,7 @@ export function elapsedPct(resetsAtS: number, nowS: number, windowS: number): nu
 
 // Chill below -margin, On track within ±margin, Watch out up to 2 margins
 // above, Hot beyond that. The edges belong to the calmer band.
-export function bandForDeviation(deviationPts: number, marginPts: number): Exclude<PaceBand, "over"> {
+export function bandForDeviation(deviationPts: number, marginPts: number): Exclude<PaceBand, "over" | "early"> {
   if (deviationPts < -marginPts) return "chill";
   if (deviationPts <= marginPts) return "onTrack";
   if (deviationPts <= WATCH_OUT_MARGINS * marginPts) return "watchOut";
@@ -63,10 +66,12 @@ export function bandForDeviation(deviationPts: number, marginPts: number): Exclu
 // The band for a limit with a fixed allowance (5h, 7d). `elapsed` is the share
 // of the window gone, or null when unknown.
 // - Used up (100% or more): Over, whatever the time. You cannot use more.
-// - Window unknown, nearly just started, or already past its end: no pace (null).
+// - Window unknown or already past its end: no pace (null).
+// - Less than `minElapsedPct` of the window gone: Just started (the sloth).
 // - Otherwise the pace decides.
 export function limitBand(usedPct: number, elapsed: number | null, cfg: PaceConfig): PaceBand | null {
   if (usedPct >= PCT_MAX) return "over";
-  if (elapsed === null || elapsed < cfg.minElapsedPct || elapsed > PCT_MAX) return null;
+  if (elapsed === null || elapsed > PCT_MAX) return null;
+  if (elapsed < cfg.minElapsedPct) return "early";
   return bandForDeviation(usedPct - elapsed, cfg.marginPts);
 }

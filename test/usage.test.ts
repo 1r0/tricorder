@@ -15,6 +15,7 @@ const COLOUR_ORANGE = "\x1b[38;5;214m";
 const COLOUR_RED = "\x1b[91m";
 const COLOUR_GREEN = "\x1b[32m";
 const COLOUR_MAGENTA = "\x1b[95m";
+const COLOUR_GREY = "\x1b[90m";
 
 // A limit whose window is `elapsed`% gone, with `used`% of the limit used.
 function limit(used: number, elapsed: number, windowS: number) {
@@ -59,12 +60,18 @@ test("a limit that is used up shows the dragon in magenta", () => {
   assert.ok(out.raw.includes(`${COLOUR_MAGENTA}100%`));
 });
 
-test("early in a window (0.55% gone, under 3%) the percent shows with no animal", () => {
+test("early in a window (0.55% gone, under 3%) a grey sloth shows", () => {
   const out = statusline({ rate_limits: { five_hour: limit(USED.early, EARLY_GONE, FIVE_HOUR_WINDOW_S) } });
-  assert.equal(out.text, "5h 5%");
+  assert.equal(out.text, "5h 🦥 5%");
+  assert.ok(out.raw.includes(`${COLOUR_GREY}5%`));
 });
 
-test("without a reset time the percent shows with no animal", () => {
+test("a limit used up early in its window is the dragon, not the sloth", () => {
+  const out = statusline({ rate_limits: { five_hour: limit(USED.over, EARLY_GONE, FIVE_HOUR_WINDOW_S) } });
+  assert.equal(out.text, "5h 🐉 100%");
+});
+
+test("without a reset time the percent shows with no animal (the pace is unknown)", () => {
   assert.equal(statusline({ rate_limits: { five_hour: { used_percentage: USED.noReset } } }).text, "5h 40%");
 });
 

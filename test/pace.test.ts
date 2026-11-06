@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { bandForDeviation, DEFAULT_PACE, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S } from "../src/pace";
 
-const BAND = { chill: "chill", onTrack: "onTrack", watchOut: "watchOut", hot: "hot", over: "over" } as const;
+const BAND = { early: "early", chill: "chill", onTrack: "onTrack", watchOut: "watchOut", hot: "hot", over: "over" } as const;
 const NOW_S = 1000;
 const EPSILON = 1e-9;
 const HALF_WINDOW = 50; // percent of the window gone
@@ -70,9 +70,10 @@ OVER_CASES.forEach((row) => {
   });
 });
 
-// No pace: under 3% gone, unknown, or already past the end. Exactly 3% is enough (50 - 3 = +47: Hot).
+// Under 3% gone: the sloth. Unknown or already past the end: no pace. Exactly 3% is enough (50 - 3 = +47: Hot).
 const NO_PACE = [
-  { used: 50, gone: 2.9, band: null },
+  { used: 50, gone: 2.9, band: BAND.early },
+  { used: 50, gone: 0, band: BAND.early },
   { used: 50, gone: 3, band: BAND.hot },
   { used: 50, gone: null, band: null },
   { used: 50, gone: 100.5, band: null },
@@ -84,7 +85,7 @@ NO_PACE.forEach((row) => {
   });
 });
 
-test("every band has an animal, a colour and a name; the five animals differ", () => {
+test("every band has an animal, a colour and a name; the six animals differ", () => {
   const styles = Object.values(PACE_STYLES);
   assert.equal(new Set(styles.map((s) => s.icon)).size, styles.length);
   assert.ok(styles.every((s) => !!s.name));

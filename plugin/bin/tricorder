@@ -29,7 +29,7 @@ function isAccountMode(value) {
 }
 var EVERY_ACCOUNT = [SUBSCRIPTION, PAYG];
 var SUBSCRIPTION_ONLY = [SUBSCRIPTION];
-var PACE_LEGEND = "The animal and the colour compare your use with the time gone in the window: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = limit reached. No animal in the first 3% of a window. (Margin and 3% are settings: statusline.pace.)";
+var PACE_LEGEND = "The animal and the colour compare your use with the time gone in the window: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = limit reached. In the first 3% of a window it is too early to tell, so a \u{1F9A5} sloth (grey) shows instead. (Margin and 3% are settings: statusline.pace.)";
 var FIELDS = [
   {
     id: "muteIcon",
@@ -165,6 +165,8 @@ function fieldsFor(type) {
 
 // src/pace.ts
 var PACE_STYLES = {
+  early: { name: "Just started", color: 90, icon: "\u{1F9A5}" },
+  // grey: too early in the window to tell
   chill: { name: "Chill", color: 32, icon: "\u{1F422}" },
   // green
   onTrack: { name: "On track", color: 94, icon: "\u{1F415}" },
@@ -192,7 +194,8 @@ function bandForDeviation(deviationPts, marginPts) {
 }
 function limitBand(usedPct, elapsed, cfg) {
   if (usedPct >= PCT_MAX) return "over";
-  if (elapsed === null || elapsed < cfg.minElapsedPct || elapsed > PCT_MAX) return null;
+  if (elapsed === null || elapsed > PCT_MAX) return null;
+  if (elapsed < cfg.minElapsedPct) return "early";
   return bandForDeviation(usedPct - elapsed, cfg.marginPts);
 }
 
