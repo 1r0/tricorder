@@ -5,10 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { plain, readConfig, run, sandbox, writeConfig } from "./helpers";
 
+const CONTEXT_USED_PCT = 42; // hand check: 42% used shows as "🔋 42%"
+const FIELD_COUNT = 9; // location, prs, context, model, muteIcon, plan, worktrees, subagents, intro
+
 // A session-less payload (no session_id) so nothing is written to the state
 // folder. The folder is not a git repo, so the location shows as "🌳 <name>".
 function payload(dir: string): string {
-  return JSON.stringify({ cwd: dir, model: { display_name: "Opus 5.5" }, context_window: { used_percentage: 42 } });
+  return JSON.stringify({ cwd: dir, model: { display_name: "Opus 5.5" }, context_window: { used_percentage: CONTEXT_USED_PCT } });
 }
 function project(): string {
   const dir = mkdtempSync(join(tmpdir(), "tricorder-proj-"));
@@ -22,7 +25,7 @@ function statusline(box: ReturnType<typeof sandbox>, dir: string): string {
 
 test("statusline: with default settings every field shows (muted icon, location, context, model)", () => {
   const box = sandbox();
-  assert.equal(statusline(box, project()), "🔇 🌳 proj · 🔋 42% · Opus 5.5");
+  assert.equal(statusline(box, project()), `🔇 🌳 proj · 🔋 ${CONTEXT_USED_PCT}% · Opus 5.5`);
 });
 
 test("statusline: switching context and the mute icon off removes them", () => {
@@ -60,7 +63,7 @@ test("fields set: an unknown id fails and leaves the config unchanged", () => {
   run(box, ["fields", "set", "model"]);
   const r = run(box, ["fields", "set", "model,bogus"]);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /unknown field\(s\): bogus/);
+  assert.ok(r.stderr.includes("unknown field(s): bogus"));
   assert.equal(readConfig(box).statusline.fields.context, false); // still the earlier result
 });
 
@@ -68,7 +71,7 @@ test("fields set: an empty list changes nothing", () => {
   const box = sandbox();
   run(box, ["fields", "set", "model"]);
   const r = run(box, ["fields", "set", ""]);
-  assert.match(r.stdout, /nothing changed/);
+  assert.ok(r.stdout.includes("nothing changed"));
   assert.equal(readConfig(box).statusline.fields.model, true);
   assert.equal(readConfig(box).statusline.fields.context, false);
 });
@@ -77,7 +80,7 @@ test("fields describe: lists fields with their explanation and on/off state", ()
   const box = sandbox();
   run(box, ["fields", "set", "model"]);
   const out = JSON.parse(run(box, ["fields", "describe"]).stdout);
-  assert.equal(out.fields.length, 9);
+  assert.equal(out.fields.length, FIELD_COUNT);
   const model = out.fields.find((f: { id: string }) => f.id === "model");
   assert.equal(model.enabled, true);
   assert.notEqual(model.shows, "");

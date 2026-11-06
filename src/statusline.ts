@@ -213,7 +213,8 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
     .filter((s): s is string => s !== null && s !== "")
     .join(SEP);
   // Passive mute indicator only (audio control lives in the menu-bar app now).
-  const left = cfg.muted && on.muteIcon ? (mid === "" ? ICON_MUTED : ICON_MUTED + " " + mid) : mid;
+  const showMute = cfg.muted && on.muteIcon;
+  const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
   const plan = session === "" || !on.plan ? null : getPlan(session);
   if (plan === null) return left;
   const right = openLink(plan, ICON_MAP + " " + sgr(DIM, "plan"));

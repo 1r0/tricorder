@@ -1,4 +1,4 @@
-import { loadConfig, saveConfig } from "./config";
+import { loadConfig, saveConfig, serialize } from "./config";
 import { FIELD_IDS, FIELDS, isFieldId, type FieldId } from "./fields";
 import { log } from "./log";
 
@@ -16,7 +16,7 @@ export function describeFields(): void {
     legend: f.legend,
     enabled: cfg.statusline.fields[f.id],
   }));
-  process.stdout.write(JSON.stringify({ fields: out }, null, 2) + "\n");
+  process.stdout.write(serialize({ fields: out }));
 }
 
 // Returns the ids to switch on, or the unknown ones. "all" means every field.
@@ -33,12 +33,12 @@ export function parseFieldList(arg: string): { readonly ids: readonly FieldId[];
 // every other field is off. An empty list or an unknown id changes nothing.
 export function setFields(arg: string | undefined): void {
   const { ids, unknown } = parseFieldList(arg ?? "");
-  if (unknown.length > 0) {
+  if (!!unknown.length) {
     process.stderr.write("tricorder: unknown field(s): " + unknown.join(", ") + "\nvalid: " + FIELD_IDS.join(", ") + "\n");
     process.exitCode = 1;
     return;
   }
-  if (ids.length === 0) {
+  if (!ids.length) {
     process.stdout.write("no fields given; nothing changed\n");
     return;
   }

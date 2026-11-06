@@ -10,10 +10,10 @@ test("catalogue: ids are unique and every field is on by default", () => {
 });
 
 test("catalogue: every field is explained (shows + sample are not empty)", () => {
-  for (const f of FIELDS) {
+  FIELDS.forEach((f) => {
     assert.notEqual(f.shows.trim(), "", f.id);
     assert.notEqual(f.sample.trim(), "", f.id);
-  }
+  });
 });
 
 test("isFieldId accepts catalogue ids only", () => {

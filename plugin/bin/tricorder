@@ -548,7 +548,8 @@ function line1(p, session, loc, cfg) {
     on.context ? contextSegment(p.context_window) : null,
     on.model ? p.model?.display_name ?? null : null
   ].filter((s) => s !== null && s !== "").join(SEP);
-  const left = cfg.muted && on.muteIcon ? mid === "" ? ICON_MUTED : ICON_MUTED + " " + mid : mid;
+  const showMute = cfg.muted && on.muteIcon;
+  const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
   const plan = session === "" || !on.plan ? null : getPlan(session);
   if (plan === null) return left;
   const right = openLink(plan, ICON_MAP + " " + sgr(DIM, "plan"));
@@ -1182,7 +1183,7 @@ function describeFields() {
     legend: f.legend,
     enabled: cfg.statusline.fields[f.id]
   }));
-  process.stdout.write(JSON.stringify({ fields: out }, null, 2) + "\n");
+  process.stdout.write(serialize({ fields: out }));
 }
 function parseFieldList(arg) {
   if (arg.trim().toLowerCase() === ALL) return { ids: FIELD_IDS, unknown: [] };
@@ -1191,12 +1192,12 @@ function parseFieldList(arg) {
 }
 function setFields(arg) {
   const { ids, unknown } = parseFieldList(arg ?? "");
-  if (unknown.length > 0) {
+  if (!!unknown.length) {
     process.stderr.write("tricorder: unknown field(s): " + unknown.join(", ") + "\nvalid: " + FIELD_IDS.join(", ") + "\n");
     process.exitCode = 1;
     return;
   }
-  if (ids.length === 0) {
+  if (!ids.length) {
     process.stdout.write("no fields given; nothing changed\n");
     return;
   }
