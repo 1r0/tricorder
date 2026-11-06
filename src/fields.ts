@@ -1,0 +1,106 @@
+// The catalogue of statusline fields: the single list the statusline, the
+// `tricorder fields` command and the /tricorder:setup command all read, so what
+// setup tells a user can never drift from what the statusline draws.
+//
+// This file must not import from config.ts (config.ts imports it for the
+// defaults).
+
+export interface FieldInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly shows: string;
+  // Example output, as plain text.
+  readonly sample: string;
+  // What its icons and colours mean. Empty when it has neither.
+  readonly legend: string;
+  readonly defaultOn: boolean;
+}
+
+// Order here is the order setup lists them in.
+export const FIELDS = [
+  {
+    id: "location",
+    name: "Location",
+    shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
+    sample: "my-repo(main)   or   🌳 fix-login",
+    legend: "Clicking opens the folder, copies the path, or both (see worktreeClick in the config).",
+    defaultOn: true,
+  },
+  {
+    id: "prs",
+    name: "Pull requests",
+    shows: "A clickable tag for each pull request this session opened from the current branch.",
+    sample: "(#12)",
+    legend: "Cyan.",
+    defaultOn: true,
+  },
+  {
+    id: "context",
+    name: "Context window",
+    shows: "How full the model's context window is.",
+    sample: "🔋 42%",
+    legend: "🔋 = context window. Green below 70%, yellow 70-89%, red from 90%.",
+    defaultOn: true,
+  },
+  {
+    id: "model",
+    name: "Model",
+    shows: "The name of the model this session is using.",
+    sample: "Opus 5.5",
+    legend: "",
+    defaultOn: true,
+  },
+  {
+    id: "muteIcon",
+    name: "Mute icon",
+    shows: "A speaker icon at the start of the line while sounds are muted.",
+    sample: "🔇",
+    legend: "🔇 = sounds are muted.",
+    defaultOn: true,
+  },
+  {
+    id: "plan",
+    name: "Plan link",
+    shows: "A link to the current plan file, at the right edge, once the session has one.",
+    sample: "🗺️ plan",
+    legend: "🗺️ = plan file. Grey text.",
+    defaultOn: true,
+  },
+  {
+    id: "worktrees",
+    name: "Other worktrees",
+    shows: "A second line listing the other worktrees this session has visited, each with its pull requests.",
+    sample: "fix-login (#12)  add-tests",
+    legend: "",
+    defaultOn: true,
+  },
+  {
+    id: "subagents",
+    name: "Sub-agents",
+    shows: "A line listing the sub-agents running right now, with the model each one uses.",
+    sample: "🤖 Explore Opus 4.8, review Sonnet 5",
+    legend: "🤖 = sub-agents. Model names in grey.",
+    defaultOn: true,
+  },
+  {
+    id: "intro",
+    name: "Start-up animation",
+    shows: "A small ship that crosses the line for the first 4 seconds of a session.",
+    sample: "o≡≡≡>",
+    legend: "Cyan.",
+    defaultOn: true,
+  },
+] as const satisfies readonly FieldInfo[];
+
+export type Field = (typeof FIELDS)[number];
+export type FieldId = Field["id"];
+
+export const FIELD_IDS: readonly FieldId[] = FIELDS.map((f) => f.id);
+
+export function isFieldId(value: unknown): value is FieldId {
+  return (FIELD_IDS as readonly unknown[]).includes(value);
+}
+
+export function defaultFields(): Record<FieldId, boolean> {
+  return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn])) as Record<FieldId, boolean>;
+}
