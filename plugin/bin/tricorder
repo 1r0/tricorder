@@ -21,11 +21,15 @@ var import_node_path = require("node:path");
 var import_node_fs2 = require("node:fs");
 
 // src/fields.ts
+var SUBSCRIPTION = "subscription";
+var PAYG = "payg";
 var ACCOUNT_MODES = ["auto", "subscription", "payg"];
 function isAccountMode(value) {
   return ACCOUNT_MODES.includes(value);
 }
-var EVERY_ACCOUNT = ["subscription", "payg"];
+var EVERY_ACCOUNT = [SUBSCRIPTION, PAYG];
+var SUBSCRIPTION_ONLY = [SUBSCRIPTION];
+var PACE_LEGEND = "The animal and the colour compare your use with the time gone in the window: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = limit reached. No animal in the first 3% of a window. (Margin and 3% are settings: statusline.pace.)";
 var FIELDS = [
   {
     id: "muteIcon",
@@ -88,6 +92,26 @@ var FIELDS = [
     defaultOn: true
   },
   {
+    id: "usage5h",
+    name: "5-hour usage",
+    line: "main",
+    shows: "How much of your 5-hour usage limit you have used, and whether you are using it faster or slower than an even pace.",
+    sample: "5h \u{1F415} 37%",
+    legend: PACE_LEGEND,
+    appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true
+  },
+  {
+    id: "usage7d",
+    name: "7-day usage",
+    line: "main",
+    shows: "How much of your 7-day usage limit you have used, and whether you are using it faster or slower than an even pace.",
+    sample: "7d \u{1F422} 12%",
+    legend: PACE_LEGEND,
+    appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true
+  },
+  {
     id: "plan",
     name: "Plan link",
     line: "main",
@@ -139,6 +163,39 @@ function fieldsFor(type) {
   return FIELDS.filter((f) => type === "unknown" || f.appliesTo.includes(type));
 }
 
+// src/pace.ts
+var PACE_STYLES = {
+  chill: { name: "Chill", color: 32, icon: "\u{1F422}" },
+  // green
+  onTrack: { name: "On track", color: 94, icon: "\u{1F415}" },
+  // blue
+  watchOut: { name: "Watch out", color: "38;5;214", icon: "\u{1F40E}" },
+  // orange
+  hot: { name: "Hot", color: 91, icon: "\u{1F985}" },
+  // red; the eagle is the closest emoji to a hawk
+  over: { name: "Over", color: 95, icon: "\u{1F409}" }
+  // magenta
+};
+var DEFAULT_PACE = { marginPts: 10, minElapsedPct: 3 };
+var FIVE_HOUR_WINDOW_S = 18e3;
+var SEVEN_DAY_WINDOW_S = 604800;
+var PCT_MAX = 100;
+var WATCH_OUT_MARGINS = 2;
+function elapsedPct(resetsAtS, nowS, windowS) {
+  return (1 - (resetsAtS - nowS) / windowS) * PCT_MAX;
+}
+function bandForDeviation(deviationPts, marginPts) {
+  if (deviationPts < -marginPts) return "chill";
+  if (deviationPts <= marginPts) return "onTrack";
+  if (deviationPts <= WATCH_OUT_MARGINS * marginPts) return "watchOut";
+  return "hot";
+}
+function limitBand(usedPct, elapsed, cfg) {
+  if (usedPct >= PCT_MAX) return "over";
+  if (elapsed === null || elapsed < cfg.minElapsedPct || elapsed > PCT_MAX) return null;
+  return bandForDeviation(usedPct - elapsed, cfg.marginPts);
+}
+
 // src/config.ts
 var JSON_INDENT = 2;
 var DATA_DIR = (0, import_node_path.join)((0, import_node_os.homedir)(), ".claude", "tricorder");
@@ -158,7 +215,7 @@ var DEFAULT_CONFIG = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields(), mode: "auto" },
+  statusline: { fields: defaultFields(), mode: "auto", pace: DEFAULT_PACE },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -193,12 +250,21 @@ function loadConfig() {
     return structuredClone(DEFAULT_CONFIG);
   }
 }
+var isPositive = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
+var isShareBelowMax = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v < PCT_MAX;
+function mergePace(base, given) {
+  const g = typeof given === "object" && given !== null ? given : {};
+  return {
+    marginPts: isPositive(g.marginPts) ? g.marginPts : base.marginPts,
+    minElapsedPct: isShareBelowMax(g.minElapsedPct) ? g.minElapsedPct : base.minElapsedPct
+  };
+}
 function mergeStatusline(base, override) {
   const given = override?.fields;
   const fields2 = Object.fromEntries(
     FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]])
   );
-  return { fields: fields2, mode: isAccountMode(override?.mode) ? override.mode : base.mode };
+  return { fields: fields2, mode: isAccountMode(override?.mode) ? override.mode : base.mode, pace: mergePace(base.pace, override?.pace) };
 }
 function mergeConfig(base, override) {
   const events = Object.keys(base.sounds);
@@ -526,7 +592,7 @@ var MARGIN = 1;
 var MINI_SHIP = "o\u2261\u2261\u2261>";
 var ANIM_MS = 4e3;
 var DEFAULT_WIDTH = 80;
-var PCT_MAX = 100;
+var PCT_MAX2 = 100;
 var CTX_RED_PCT = 90;
 var CTX_YELLOW_PCT = 70;
 function usedTokens(cw) {
@@ -538,7 +604,7 @@ function usedTokens(cw) {
 }
 function computePct(cw, size, used) {
   if (typeof cw.used_percentage === "number") return cw.used_percentage;
-  if (size > 0) return used / size * PCT_MAX;
+  if (size > 0) return used / size * PCT_MAX2;
   return 0;
 }
 function ctxColor(pct) {
@@ -551,6 +617,17 @@ function contextSegment(cw) {
   const size = cw.context_window_size ?? 0;
   const pctInt = Math.round(computePct(cw, size, usedTokens(cw)));
   return ICON_CTX + " " + sgr(ctxColor(pctInt), pctInt + "%");
+}
+var MS_PER_S = 1e3;
+function usageSegment(label, win, windowS, nowS, pace) {
+  const used = win?.used_percentage;
+  if (typeof used !== "number") return null;
+  const pct = Math.round(used) + "%";
+  const resets = win?.resets_at;
+  const band = limitBand(used, typeof resets === "number" ? elapsedPct(resets, nowS, windowS) : null, pace);
+  if (band === null) return label + " " + pct;
+  const style = PACE_STYLES[band];
+  return label + " " + style.icon + " " + sgr(style.color, pct);
 }
 function resolveLocation(p, session) {
   const wt = p.worktree;
@@ -589,10 +666,13 @@ function terminalWidth() {
 function line1(p, session, loc, cfg) {
   const on = cfg.statusline.fields;
   const dirty = on.location && on.dirty && loc.path !== "" && isDirty(loc.path) === true;
+  const nowS = Date.now() / MS_PER_S;
   const mid = [
     on.location ? locationSegment(loc, session, { mode: cfg.worktreeClick, showPrs: on.prs, dirty }) : null,
     on.context ? contextSegment(p.context_window) : null,
-    on.model ? p.model?.display_name ?? null : null
+    on.model ? p.model?.display_name ?? null : null,
+    on.usage5h ? usageSegment("5h", p.rate_limits?.five_hour, FIVE_HOUR_WINDOW_S, nowS, cfg.statusline.pace) : null,
+    on.usage7d ? usageSegment("7d", p.rate_limits?.seven_day, SEVEN_DAY_WINDOW_S, nowS, cfg.statusline.pace) : null
   ].filter((s) => s !== null && s !== "").join(SEP);
   const showMute = cfg.muted && on.muteIcon;
   const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
@@ -1265,8 +1345,16 @@ var CURRENT_PR_NUMBER = 12;
 var OTHER_PR_NUMBER = 13;
 var CONTEXT_USED_PCT = 42;
 var MODEL_NAME = "Opus 5.5";
-var PREVIEW_COLUMNS = "72";
+var PREVIEW_COLUMNS = "90";
 var RENDER_TIMEOUT_MS = 1e4;
+var MS_PER_S2 = 1e3;
+var FIVE_HOUR_USED_PCT = 37;
+var FIVE_HOUR_ELAPSED_PCT = 40;
+var SEVEN_DAY_USED_PCT = 12;
+var SEVEN_DAY_ELAPSED_PCT = 50;
+function resetsAt(elapsedPct2, windowS) {
+  return Date.now() / MS_PER_S2 + (1 - elapsedPct2 / PCT_MAX) * windowS;
+}
 var exampleDir = () => (0, import_node_path9.join)((0, import_node_os2.homedir)(), EXAMPLE_DIR_NAME);
 function makeDirtyFolder(path) {
   (0, import_node_fs9.mkdirSync)(path, { recursive: true });
@@ -1294,7 +1382,11 @@ function renderPreviewSession() {
       cwd: path,
       worktree: { path, name: CURRENT_BRANCH, branch: CURRENT_BRANCH },
       model: { display_name: MODEL_NAME },
-      context_window: { used_percentage: CONTEXT_USED_PCT }
+      context_window: { used_percentage: CONTEXT_USED_PCT },
+      rate_limits: {
+        five_hour: { used_percentage: FIVE_HOUR_USED_PCT, resets_at: resetsAt(FIVE_HOUR_ELAPSED_PCT, FIVE_HOUR_WINDOW_S) },
+        seven_day: { used_percentage: SEVEN_DAY_USED_PCT, resets_at: resetsAt(SEVEN_DAY_ELAPSED_PCT, SEVEN_DAY_WINDOW_S) }
+      }
     })
   );
 }

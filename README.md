@@ -42,7 +42,7 @@ runtime (or the optional dependency-free build below).
 
 ## Features
 
-- **Multi-line statusline** — a branch-aware location link (current worktree, or `dir(branch)` in a plain repo) with a yellow `*` after the branch when the folder has uncommitted changes, a color-graded context-window gauge, model, running sub-agents with their model, and a plan-file link. If you switch worktrees mid-session, the others you've visited list underneath, each with its matched PR shown inline. Only non-empty lines render. A one-shot mini-ship animation greets each new session. Every field can be switched off: run `/tricorder:setup` in Claude Code to [choose which to show](#choosing-which-statusline-fields-to-show).
+- **Multi-line statusline** — a branch-aware location link (current worktree, or `dir(branch)` in a plain repo) with a yellow `*` after the branch when the folder has uncommitted changes, a color-graded context-window gauge, model, and (on subscription accounts) your 5-hour and 7-day usage with a [pace](#usage-and-pace) animal, running sub-agents with their model, and a plan-file link. If you switch worktrees mid-session, the others you've visited list underneath, each with its matched PR shown inline. Only non-empty lines render. A one-shot mini-ship animation greets each new session. Every field can be switched off: run `/tricorder:setup` in Claude Code to [choose which to show](#choosing-which-statusline-fields-to-show).
 - **Away-team menu bar** — one icon reflects the highest-priority state across every session (🔴 security, 🟡 question, 🟢 done). Click a row to focus that session's iTerm2 tab, wherever it is. A 🔊 marks whichever row's sound just played, so several "mission complete" rows aren't ambiguous about which one is current.
 - **Restore Sessions** — after a crash or reboot, reopen whole project families in fresh iTerm2 windows with one click, grouped automatically by directory.
 - **Attention klaxons** — four Star Trek voice/chime cues, muted by default, toggled per-event from the menu.
@@ -140,6 +140,24 @@ Pick a different clip for any event from the [sound catalog](https://gagoar.gith
 
 `worktreeClick` controls what clicking the worktree link does: `open` (default, a bare `file://` link — no app needed), `copy` (copies the path to the clipboard), or `both`. `copy`/`both` need the menu-bar app running to handle the click; set it from `setup.sh`'s prompt or the app's "Worktree Link" menu.
 
+### Usage and pace
+
+On a subscription account (Pro, Max, ...) Claude Code reports how much of your 5-hour and 7-day limits you have used, and when each window ends. Tricorder shows it as `5h 🐕 37% · 7d 🐢 12%`. The animal tells you whether you are using the limit faster or slower than an even spread over the window:
+
+> pace = % of the limit used − % of the window that has passed (percentage points)
+
+| Animal | Band | Colour | When (default margin 10) |
+|---|---|---|---|
+| 🐢 | Chill | green | more than 10 points under an even pace |
+| 🐕 | On track | blue | within 10 points either side |
+| 🐎 | Watch out | orange | 10 to 20 points over |
+| 🦅 | Hot | red | more than 20 points over |
+| 🐉 | Over | magenta | the limit is used up (100%) |
+
+Example: 5 hours is the window and 2.5 hours have passed (50%). With 55% used you are +5, 🐕 on track; with 65% used +15, 🐎; with 75% used +25, 🦅. With 30% used you are −20, 🐢.
+
+Below 3% of the window gone the pace is too noisy to mean anything, so only the percent shows. Both numbers are settings: `statusline.pace.marginPts` (default 10, from the default of Claude's Pacing Sensitivity screen) and `statusline.pace.minElapsedPct` (default 3). Pay-per-use accounts send no limits, so these fields are not offered to them.
+
 ### Choosing which statusline fields to show
 
 Every statusline field is optional. In Claude Code run `/tricorder:setup`: it detects whether your account is a subscription or pay per use, explains each field that applies (what it shows, an example, what its icons and colours mean), then asks which ones you want. You can also change them from the terminal:
@@ -151,7 +169,7 @@ tricorder fields set context,model   # show only these two; everything else off
 tricorder fields set all             # show everything again
 ```
 
-The choice is stored in `~/.claude/tricorder/config.json` under `statusline.fields`. All fields are on by default, so nothing changes until you choose. Field ids, in the order they appear on the statusline: `muteIcon`, `location`, `dirty`, `prs`, `context`, `model`, `plan`, `worktrees`, `subagents`, `intro`.
+The choice is stored in `~/.claude/tricorder/config.json` under `statusline.fields`. All fields are on by default, so nothing changes until you choose. Field ids, in the order they appear on the statusline: `muteIcon`, `location`, `dirty`, `prs`, `context`, `model`, `usage5h`, `usage7d`, `plan`, `worktrees`, `subagents`, `intro`.
 
 `statusline.mode` is `auto` (default: detect the account type from Claude Code's own `.claude.json`), or `subscription` / `payg` to force it. The detection reads a Claude Code internal file; if that file moves or cannot be read, the type is `unknown` and every field is offered.
 

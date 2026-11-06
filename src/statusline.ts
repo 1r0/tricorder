@@ -12,6 +12,7 @@ import {
   setModel,
 } from "./state";
 import { currentBranch, isDirty } from "./git";
+import { elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, type PaceConfig } from "./pace";
 
 // ---- payload shape (subset of the statusline stdin JSON) -------------------
 
@@ -38,6 +39,16 @@ interface Workspace {
   readonly current_dir?: string;
   readonly git_worktree?: string;
 }
+// A usage limit as Claude Code reports it (subscription accounts only).
+// `resets_at` is when the window ends, in epoch seconds.
+interface RateWindow {
+  readonly used_percentage?: number | null;
+  readonly resets_at?: number | null;
+}
+interface RateLimits {
+  readonly five_hour?: RateWindow;
+  readonly seven_day?: RateWindow;
+}
 interface Payload {
   readonly session_id?: string;
   readonly cwd?: string;
@@ -45,6 +56,7 @@ interface Payload {
   readonly workspace?: Workspace;
   readonly worktree?: Worktree;
   readonly context_window?: ContextWindow;
+  readonly rate_limits?: RateLimits;
 }
 
 // ---- terminal formatting ---------------------------------------------------
@@ -58,7 +70,7 @@ const GREEN = 32;
 const CYAN = 96;
 const DIM = 90;
 
-function sgr(code: number, text: string): string {
+function sgr(code: number | string, text: string): string {
   return ESC + "[" + code + "m" + text + RESET;
 }
 function osc8(url: string, text: string): string {
@@ -151,6 +163,24 @@ function contextSegment(cw: ContextWindow | undefined): string | null {
   return ICON_CTX + " " + sgr(ctxColor(pctInt), pctInt + "%");
 }
 
+// ---- usage limits (5h / 7d) with pace ---------------------------------------
+
+const MS_PER_S = 1000;
+
+// "5h 🐕 37%": the label, an animal for the pace, and the percent used in the
+// pace colour. Without a usable pace (window unknown or just started) only the
+// label and percent. Nothing when Claude Code sent no number for the limit.
+function usageSegment(label: string, win: RateWindow | undefined, windowS: number, nowS: number, pace: PaceConfig): string | null {
+  const used = win?.used_percentage;
+  if (typeof used !== "number") return null;
+  const pct = Math.round(used) + "%";
+  const resets = win?.resets_at;
+  const band = limitBand(used, typeof resets === "number" ? elapsedPct(resets, nowS, windowS) : null, pace);
+  if (band === null) return label + " " + pct;
+  const style = PACE_STYLES[band];
+  return label + " " + style.icon + " " + sgr(style.color, pct);
+}
+
 // ---- location (worktree / branch) + PR matching -----------------------------
 
 // Claude Code only sends `worktree` / `workspace.git_worktree` inside a
@@ -220,10 +250,13 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
   const on = cfg.statusline.fields;
   // git is only asked when the field is on, so switching it off also saves the call.
   const dirty = on.location && on.dirty && loc.path !== "" && isDirty(loc.path) === true;
+  const nowS = Date.now() / MS_PER_S;
   const mid = [
     on.location ? locationSegment(loc, session, { mode: cfg.worktreeClick, showPrs: on.prs, dirty }) : null,
     on.context ? contextSegment(p.context_window) : null,
     on.model ? (p.model?.display_name ?? null) : null,
+    on.usage5h ? usageSegment("5h", p.rate_limits?.five_hour, FIVE_HOUR_WINDOW_S, nowS, cfg.statusline.pace) : null,
+    on.usage7d ? usageSegment("7d", p.rate_limits?.seven_day, SEVEN_DAY_WINDOW_S, nowS, cfg.statusline.pace) : null,
   ]
     .filter((s): s is string => s !== null && s !== "")
     .join(SEP);

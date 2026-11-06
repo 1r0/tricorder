@@ -8,7 +8,9 @@
 // "subscription" = signed in with a Claude account (Pro, Max, Team...).
 // "payg"         = pay per use: an API key or a cloud-provider login.
 // "unknown"      = the account could not be detected; every field is offered.
-export type AccountType = "subscription" | "payg";
+const SUBSCRIPTION = "subscription";
+const PAYG = "payg";
+export type AccountType = typeof SUBSCRIPTION | typeof PAYG;
 export type DetectedType = AccountType | "unknown";
 
 export const ACCOUNT_MODES = ["auto", "subscription", "payg"] as const;
@@ -32,12 +34,17 @@ export interface FieldInfo {
   readonly defaultOn: boolean;
 }
 
-const EVERY_ACCOUNT: readonly AccountType[] = ["subscription", "payg"];
+const EVERY_ACCOUNT: readonly AccountType[] = [SUBSCRIPTION, PAYG];
+const SUBSCRIPTION_ONLY: readonly AccountType[] = [SUBSCRIPTION];
+
+// Shared by the usage fields: what the animal and the colour of the percentage mean.
+const PACE_LEGEND =
+  "The animal and the colour compare your use with the time gone in the window: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = limit reached. No animal in the first 3% of a window. (Margin and 3% are settings: statusline.pace.)";
 
 // Order here is the order the fields appear on the statusline, left to right,
 // then top to bottom (line 1: mute icon, location with its uncommitted-changes
 // mark and PR tags, context,
-// model, plan link at the right edge; then the other-worktrees line, then the
+// model, 5-hour and 7-day usage, plan link at the right edge; then the other-worktrees line, then the
 // sub-agents line). The start-up animation comes last: it only shows for the
 // first seconds. Setup lists the fields in this same order.
 export const FIELDS = [
@@ -99,6 +106,26 @@ export const FIELDS = [
     sample: "Opus 5.5",
     legend: "",
     appliesTo: EVERY_ACCOUNT,
+    defaultOn: true,
+  },
+  {
+    id: "usage5h",
+    name: "5-hour usage",
+    line: "main",
+    shows: "How much of your 5-hour usage limit you have used, and whether you are using it faster or slower than an even pace.",
+    sample: "5h 🐕 37%",
+    legend: PACE_LEGEND,
+    appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true,
+  },
+  {
+    id: "usage7d",
+    name: "7-day usage",
+    line: "main",
+    shows: "How much of your 7-day usage limit you have used, and whether you are using it faster or slower than an even pace.",
+    sample: "7d 🐢 12%",
+    legend: PACE_LEGEND,
+    appliesTo: SUBSCRIPTION_ONLY,
     defaultOn: true,
   },
   {

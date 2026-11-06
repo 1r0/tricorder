@@ -10,7 +10,7 @@ test("catalogue: ids are unique and every field is on by default", () => {
 });
 
 // The order the fields are drawn on line 1 of the statusline, left to right.
-const LINE_1_ORDER = ["muteIcon", "location", "dirty", "prs", "context", "model", "plan"];
+const LINE_1_ORDER = ["muteIcon", "location", "dirty", "prs", "context", "model", "usage5h", "usage7d", "plan"];
 
 test("catalogue: fields are listed in the order the statusline draws them", () => {
   assert.deepEqual(FIELD_IDS.slice(0, LINE_1_ORDER.length), LINE_1_ORDER);
@@ -64,6 +64,17 @@ test("mergeConfig: keeps valid switches, ignores unknown ids and non-booleans", 
   assert.equal(merged.statusline.fields.model, true); // "yes" is not a boolean: default kept
   assert.equal("bogus" in merged.statusline.fields, false);
   assert.equal(merged.statusline.mode, "payg");
+});
+
+const CUSTOM_PACE = { marginPts: 5, minElapsedPct: 0 } as const;
+const BAD_PACE = { marginPts: -3, minElapsedPct: "x" } as const;
+
+test("mergeConfig: pace settings keep valid numbers; anything else keeps the default", () => {
+  const ok = mergeConfig(DEFAULT_CONFIG, { statusline: { pace: CUSTOM_PACE } } as never);
+  assert.deepEqual(ok.statusline.pace, CUSTOM_PACE);
+  const bad = mergeConfig(DEFAULT_CONFIG, { statusline: { pace: BAD_PACE } } as never);
+  assert.deepEqual(bad.statusline.pace, DEFAULT_CONFIG.statusline.pace);
+  assert.deepEqual(mergeConfig(DEFAULT_CONFIG, { muted: false }).statusline.pace, DEFAULT_CONFIG.statusline.pace);
 });
 
 test("mergeConfig: an invalid mode falls back to auto", () => {

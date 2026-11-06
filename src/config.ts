@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { defaultFields, isAccountMode, FIELD_IDS, type AccountMode, type FieldId } from "./fields";
+import { DEFAULT_PACE, PCT_MAX, type PaceConfig } from "./pace";
 
 const JSON_INDENT = 2;
 
@@ -41,6 +42,7 @@ export interface StatuslineConfig {
   readonly fields: Record<FieldId, boolean>;
   // "auto" detects the account type; the other two force it.
   readonly mode: AccountMode;
+  readonly pace: PaceConfig;
 }
 
 export interface Config {
@@ -55,7 +57,7 @@ export const DEFAULT_CONFIG: Config = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields(), mode: "auto" },
+  statusline: { fields: defaultFields(), mode: "auto", pace: DEFAULT_PACE },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -95,12 +97,24 @@ export function loadConfig(): Config {
   }
 }
 
+const isPositive = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0;
+const isShareBelowMax = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v < PCT_MAX;
+
+// A pace setting that is missing, not a number or out of range keeps its default.
+function mergePace(base: PaceConfig, given: unknown): PaceConfig {
+  const g = (typeof given === "object" && given !== null ? given : {}) as Partial<Record<keyof PaceConfig, unknown>>;
+  return {
+    marginPts: isPositive(g.marginPts) ? g.marginPts : base.marginPts,
+    minElapsedPct: isShareBelowMax(g.minElapsedPct) ? g.minElapsedPct : base.minElapsedPct,
+  };
+}
+
 function mergeStatusline(base: StatuslineConfig, override: Partial<StatuslineConfig> | undefined): StatuslineConfig {
   const given = override?.fields as Partial<Record<string, unknown>> | undefined;
   const fields = Object.fromEntries(
     FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]] as const),
   ) as Record<FieldId, boolean>;
-  return { fields, mode: isAccountMode(override?.mode) ? override.mode : base.mode };
+  return { fields, mode: isAccountMode(override?.mode) ? override.mode : base.mode, pace: mergePace(base.pace, override?.pace) };
 }
 
 export function mergeConfig(base: Config, override: Partial<Config>): Config {

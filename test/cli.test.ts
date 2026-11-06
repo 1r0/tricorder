@@ -8,8 +8,12 @@ import { plain, readConfig, run, sandbox, writeConfig } from "./helpers";
 const CONTEXT_USED_PCT = 42; // hand check: 42% used shows as "🔋 42%"
 const ACCOUNT_SUBSCRIPTION = "subscription";
 const ACCOUNT_DIR_PREFIX = "tricorder-acct-";
-// Hand count for a subscription: 10 fields + "Enable all" = 11 options → 4, 4, 3.
-const SUBSCRIPTION = { fields: 10, optionCounts: [4, 4, 3] } as const;
+// Hand count for a subscription: 12 fields + "Enable all" = 13 options → 4, 4, 4, 1 → the single one borrows: 4, 4, 3, 2.
+// Pay per use has no 5h/7d fields: 10 + 1 = 11 options → 4, 4, 3.
+const SUBSCRIPTION = { fields: 12, optionCounts: [4, 4, 3, 2] } as const;
+const PAYG = { optionCounts: [4, 4, 3] } as const;
+const DESCRIBE = "describe";
+const QUESTIONS = "questions";
 
 // A session-less payload (no session_id) so nothing is written to the state
 // folder. The folder is not a git repo, so the location shows as "🌳 <name>".
@@ -101,7 +105,7 @@ test("detect: a config folder with no account entry is pay per use; a missing fi
 test("fields describe: lists fields with their explanation and on/off state", () => {
   const box = sandbox();
   run(box, ["fields", "set", "model"]);
-  const out = JSON.parse(run(box, ["fields", "describe", "payg"]).stdout);
+  const out = JSON.parse(run(box, ["fields", DESCRIBE, "payg"]).stdout);
   assert.equal(out.type, "payg");
   const model = out.fields.find((f: { id: string }) => f.id === "model");
   assert.equal(model.enabled, true);
@@ -109,9 +113,9 @@ test("fields describe: lists fields with their explanation and on/off state", ()
   assert.equal(out.fields.find((f: { id: string }) => f.id === "context").enabled, false);
 });
 
-test("fields questions: for a subscription gives 3 questions (4, 4, 3 options) in one call", () => {
+test("fields questions: for a subscription gives 3 questions (4, 4, 3, 2 options) in one call", () => {
   const box = sandbox();
-  const out = JSON.parse(run(box, ["fields", "questions", ACCOUNT_SUBSCRIPTION]).stdout);
+  const out = JSON.parse(run(box, ["fields", QUESTIONS, ACCOUNT_SUBSCRIPTION]).stdout);
   assert.equal(out.calls.length, 1);
   assert.deepEqual(out.calls[0].map((q: { options: unknown[] }) => q.options.length), SUBSCRIPTION.optionCounts);
   assert.equal(out.labels["Context window"], "context");
@@ -120,19 +124,20 @@ test("fields questions: for a subscription gives 3 questions (4, 4, 3 options) i
 // Hand check: the options follow the statusline's left-to-right order, with "Enable all" first.
 const QUESTION_LABELS_IN_ORDER = [
   "Enable all", "Mute icon", "Location", "Uncommitted changes",
-  "Pull requests", "Context window", "Model", "Plan link",
-  "Other worktrees", "Sub-agents", "Start-up animation",
+  "Pull requests", "Context window", "Model", "5-hour usage",
+  "7-day usage", "Plan link", "Other worktrees", "Sub-agents",
+  "Start-up animation",
 ];
 
 test("fields questions: options are listed in the order the statusline draws the fields", () => {
   const box = sandbox();
-  const out = JSON.parse(run(box, ["fields", "questions", ACCOUNT_SUBSCRIPTION]).stdout);
+  const out = JSON.parse(run(box, ["fields", QUESTIONS, ACCOUNT_SUBSCRIPTION]).stdout);
   const labels = out.calls.flat().flatMap((q: { options: { label: string }[] }) => q.options.map((o) => o.label));
   assert.deepEqual(labels, QUESTION_LABELS_IN_ORDER);
 });
 
 // Hand check: with every field on, the made-up session shows these four lines.
-const PREVIEW_LINE_1_START = "🔇 🌳 fix-login* (#12) · 🔋 42% · Opus 5.5";
+const PREVIEW_LINE_1_START = "🔇 🌳 fix-login* (#12) · 🔋 42% · Opus 5.5 · 5h 🐕 37% · 7d 🐢 12%";
 const PREVIEW_LINE_1_END = "🗺️ plan";
 const PREVIEW_LINES = ["add-tests (#13)", "🤖 Explore Opus 4.8, review Sonnet 5"];
 const PREVIEW_SHIP = "o≡≡≡>";
@@ -160,4 +165,15 @@ test("fields preview: leaves the real config and session state alone", () => {
   run(box, ["fields", "preview"]);
   assert.deepEqual(readConfig(box), before);
   assert.equal(existsSync(join(box.home, ".claude", "tricorder", "state", "preview")), false);
+});
+
+test("pay-per-use accounts are not offered the 5h/7d fields", () => {
+  const box = sandbox();
+  const described = JSON.parse(run(box, ["fields", DESCRIBE, "payg"]).stdout);
+  const ids = described.fields.map((f: { id: string }) => f.id);
+  assert.ok(!ids.includes("usage5h") && !ids.includes("usage7d"));
+  const asked = JSON.parse(run(box, ["fields", QUESTIONS, "payg"]).stdout);
+  assert.deepEqual(asked.calls[0].map((q: { options: unknown[] }) => q.options.length), PAYG.optionCounts);
+  const sub = JSON.parse(run(box, ["fields", DESCRIBE, ACCOUNT_SUBSCRIPTION]).stdout);
+  assert.ok(sub.fields.some((f: { id: string }) => f.id === "usage5h"));
 });

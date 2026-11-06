@@ -17,6 +17,7 @@ The statusline shows, on multiple lines and only when there's something to show:
 - **Uncommitted changes** — a yellow `*` after the branch name (`my-repo(main*)`, or `🌳 fix-login*` in a worktree) when the folder has edited, staged or new files that are not committed. Nothing is shown outside a git repository. It runs `git status --porcelain` each time the statusline redraws; switch the `dirty` field off if that is slow in a very large repository.
 - **Context gauge** — percent only, colored green/yellow/red (green below 70%, yellow from 70%, red from 90%). It reports the truth; it cannot force a compact (the harness owns that).
 - **Model** — the current session model.
+- **5-hour and 7-day usage** (subscription accounts) — `5h 🐕 37% · 7d 🐢 12%`: the share of each usage limit used, with an animal for the pace (used % minus the % of the window gone): 🐢 Chill (green, more than `marginPts` under), 🐕 On track (blue, within `marginPts`), 🐎 Watch out (orange, up to twice `marginPts` over), 🦅 Hot (red, beyond that), 🐉 Over (magenta, limit used up). Below `minElapsedPct` of the window gone only the percent shows. `marginPts` (default 10) and `minElapsedPct` (default 3) are in the `statusline.pace` config block; see the main README for the worked numbers. Pay-per-use accounts send no limits and are not offered these fields.
 - **PRs** — every PR created this session, each an `https` link.
 - **Sub-agents** — one line per running sub-agent: type and model, comma-separated. The model is exact when the spawn set an override, or inherited from the session once the statusline has rendered at least once (no Claude Code hook payload carries the session's model name, only the statusline's does); until then it shows `default`. This only affects the statusline's own display — the menu-bar app never shows model, so it's unaffected either way.
 - **Plan** — the plan file, right-aligned, a `file://` link.
@@ -80,7 +81,8 @@ Effective config lives at `~/.claude/tricorder/config.json`, seeded on first run
   "statusline": {
     "mode": "auto",
     "fields": { "muteIcon": true, "location": true, "dirty": true, "prs": true, "context": true, "model": true,
-                "plan": true, "worktrees": true, "subagents": true, "intro": true }
+                "usage5h": true, "usage7d": true, "plan": true, "worktrees": true, "subagents": true, "intro": true },
+    "pace": { "marginPts": 10, "minElapsedPct": 3 }
   },
   "sounds": {
     "question":   { "enabled": true,  "file": ".../please-specify.mp3" },
