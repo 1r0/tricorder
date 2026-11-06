@@ -48,6 +48,16 @@ var FIELDS = [
     defaultOn: true
   },
   {
+    id: "dirty",
+    name: "Uncommitted changes",
+    line: "main",
+    shows: "A yellow * after the branch name when the folder has changes that are not committed yet (edited, staged or new files).",
+    sample: "my-repo(main*)   or   \u{1F333} fix-login*",
+    legend: "Yellow *. Nothing is shown for a folder that is not a git repository.",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
     id: "prs",
     name: "Pull requests",
     line: "main",
@@ -440,6 +450,10 @@ function currentBranch(cwd) {
   const branch = out.trim();
   return branch === "" ? null : branch;
 }
+function isDirty(cwd) {
+  const out = run(["status", "--porcelain"], cwd);
+  return out === null ? null : out.trim() !== "";
+}
 var EMPTY_STATE = { entries: [], path: null, branch: null, bare: false };
 function flush(state) {
   const entries = state.path !== null && !state.bare ? [...state.entries, { path: state.path, branch: state.branch }] : state.entries;
@@ -554,15 +568,17 @@ function prSuffix(session, branch) {
   if (session === "" || branch === null) return "";
   return prsForBranch(session, branch).map((pr) => " " + osc8(pr.url, sgr(CYAN, "(" + (pr.number === null ? "PR" : "#" + pr.number) + ")"))).join("");
 }
-function locationSegment(loc, session, mode, showPrs) {
+function locationSegment(loc, session, opts) {
   if (loc.path === "") return null;
+  const { mode, showPrs } = opts;
+  const mark = opts.dirty ? sgr(YELLOW, "*") : "";
   const prs = (branch) => showPrs ? prSuffix(session, branch) : "";
   if (loc.isWorktree) {
     const label = loc.branch ?? ((0, import_node_path3.basename)(loc.path) || loc.path);
-    return worktreeLink(loc.path, ICON_TREE + " " + label, mode) + prs(loc.branch);
+    return worktreeLink(loc.path, ICON_TREE + " " + label + mark, mode) + prs(loc.branch);
   }
   if (loc.branch !== null) {
-    const label = ((0, import_node_path3.basename)(loc.path) || loc.path) + "(" + loc.branch + ")";
+    const label = ((0, import_node_path3.basename)(loc.path) || loc.path) + "(" + loc.branch + mark + ")";
     return worktreeLink(loc.path, label, mode) + prs(loc.branch);
   }
   return worktreeLink(loc.path, ICON_TREE + " " + ((0, import_node_path3.basename)(loc.path) || loc.path), mode);
@@ -572,8 +588,9 @@ function terminalWidth() {
 }
 function line1(p, session, loc, cfg) {
   const on = cfg.statusline.fields;
+  const dirty = on.location && on.dirty && loc.path !== "" && isDirty(loc.path) === true;
   const mid = [
-    on.location ? locationSegment(loc, session, cfg.worktreeClick, on.prs) : null,
+    on.location ? locationSegment(loc, session, { mode: cfg.worktreeClick, showPrs: on.prs, dirty }) : null,
     on.context ? contextSegment(p.context_window) : null,
     on.model ? p.model?.display_name ?? null : null
   ].filter((s) => s !== null && s !== "").join(SEP);
@@ -1240,7 +1257,7 @@ var import_node_fs9 = require("node:fs");
 var import_node_os2 = require("node:os");
 var import_node_path9 = require("node:path");
 var SESSION = "preview";
-var EXAMPLE_DIR = "/example";
+var EXAMPLE_DIR_NAME = "example";
 var EXAMPLE_PR_URL = "https://example.invalid/pull/";
 var CURRENT_BRANCH = "fix-login";
 var OTHER_BRANCH = "add-tests";
@@ -1250,17 +1267,27 @@ var CONTEXT_USED_PCT = 42;
 var MODEL_NAME = "Opus 5.5";
 var PREVIEW_COLUMNS = "72";
 var RENDER_TIMEOUT_MS = 1e4;
+var exampleDir = () => (0, import_node_path9.join)((0, import_node_os2.homedir)(), EXAMPLE_DIR_NAME);
+function makeDirtyFolder(path) {
+  (0, import_node_fs9.mkdirSync)(path, { recursive: true });
+  (0, import_node_fs9.writeFileSync)((0, import_node_path9.join)(path, "notes.txt"), "not committed yet\n");
+  try {
+    (0, import_node_child_process4.execFileSync)("git", ["init", "-q"], { cwd: path, stdio: "ignore", env: { PATH: process.env.PATH ?? "", HOME: (0, import_node_os2.homedir)() } });
+  } catch {
+  }
+}
 function seedSession() {
   addPR(SESSION, { number: CURRENT_PR_NUMBER, url: EXAMPLE_PR_URL + CURRENT_PR_NUMBER, branch: CURRENT_BRANCH });
   addPR(SESSION, { number: OTHER_PR_NUMBER, url: EXAMPLE_PR_URL + OTHER_PR_NUMBER, branch: OTHER_BRANCH });
-  addWorktree(SESSION, { path: (0, import_node_path9.join)(EXAMPLE_DIR, OTHER_BRANCH), branch: OTHER_BRANCH });
+  addWorktree(SESSION, { path: (0, import_node_path9.join)(exampleDir(), OTHER_BRANCH), branch: OTHER_BRANCH });
   addSubagent(SESSION, "a", { type: "Explore", desc: "", model: "Opus 4.8", startedAt: 0 });
   addSubagent(SESSION, "b", { type: "review", desc: "", model: "Sonnet 5", startedAt: 0 });
-  setPlan(SESSION, (0, import_node_path9.join)(EXAMPLE_DIR, "plan.md"));
+  setPlan(SESSION, (0, import_node_path9.join)(exampleDir(), "plan.md"));
 }
 function renderPreviewSession() {
   seedSession();
-  const path = (0, import_node_path9.join)(EXAMPLE_DIR, CURRENT_BRANCH);
+  const path = (0, import_node_path9.join)(exampleDir(), CURRENT_BRANCH);
+  makeDirtyFolder(path);
   renderStatusline(
     JSON.stringify({
       session_id: SESSION,

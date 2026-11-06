@@ -42,7 +42,7 @@ runtime (or the optional dependency-free build below).
 
 ## Features
 
-- **Multi-line statusline** — a branch-aware location link (current worktree, or `dir(branch)` in a plain repo), a color-graded context-window gauge, model, running sub-agents with their model, and a plan-file link. If you switch worktrees mid-session, the others you've visited list underneath, each with its matched PR shown inline. Only non-empty lines render. A one-shot mini-ship animation greets each new session. Every field can be switched off: run `/tricorder:setup` in Claude Code to [choose which to show](#choosing-which-statusline-fields-to-show).
+- **Multi-line statusline** — a branch-aware location link (current worktree, or `dir(branch)` in a plain repo) with a yellow `*` after the branch when the folder has uncommitted changes, a color-graded context-window gauge, model, running sub-agents with their model, and a plan-file link. If you switch worktrees mid-session, the others you've visited list underneath, each with its matched PR shown inline. Only non-empty lines render. A one-shot mini-ship animation greets each new session. Every field can be switched off: run `/tricorder:setup` in Claude Code to [choose which to show](#choosing-which-statusline-fields-to-show).
 - **Away-team menu bar** — one icon reflects the highest-priority state across every session (🔴 security, 🟡 question, 🟢 done). Click a row to focus that session's iTerm2 tab, wherever it is. A 🔊 marks whichever row's sound just played, so several "mission complete" rows aren't ambiguous about which one is current.
 - **Restore Sessions** — after a crash or reboot, reopen whole project families in fresh iTerm2 windows with one click, grouped automatically by directory.
 - **Attention klaxons** — four Star Trek voice/chime cues, muted by default, toggled per-event from the menu.
@@ -151,7 +151,7 @@ tricorder fields set context,model   # show only these two; everything else off
 tricorder fields set all             # show everything again
 ```
 
-The choice is stored in `~/.claude/tricorder/config.json` under `statusline.fields`. All fields are on by default, so nothing changes until you choose. Field ids, in the order they appear on the statusline: `muteIcon`, `location`, `prs`, `context`, `model`, `plan`, `worktrees`, `subagents`, `intro`.
+The choice is stored in `~/.claude/tricorder/config.json` under `statusline.fields`. All fields are on by default, so nothing changes until you choose. Field ids, in the order they appear on the statusline: `muteIcon`, `location`, `dirty`, `prs`, `context`, `model`, `plan`, `worktrees`, `subagents`, `intro`.
 
 `statusline.mode` is `auto` (default: detect the account type from Claude Code's own `.claude.json`), or `subscription` / `payg` to force it. The detection reads a Claude Code internal file; if that file moves or cannot be read, the type is `unknown` and every field is offered.
 

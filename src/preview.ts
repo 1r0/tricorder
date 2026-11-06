@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig, serialize } from "./config";
 import { FIELDS } from "./fields";
@@ -14,7 +14,7 @@ import { plainText, renderStatusline } from "./statusline";
 // state are only read, never written.
 
 const SESSION = "preview";
-const EXAMPLE_DIR = "/example";
+const EXAMPLE_DIR_NAME = "example"; // inside the throwaway home folder
 const EXAMPLE_PR_URL = "https://example.invalid/pull/";
 const CURRENT_BRANCH = "fix-login";
 const OTHER_BRANCH = "add-tests";
@@ -25,22 +25,38 @@ const MODEL_NAME = "Opus 5.5";
 const PREVIEW_COLUMNS = "72"; // width the plan link is pushed to the right edge of
 const RENDER_TIMEOUT_MS = 10_000;
 
-// The made-up session: one branch with a PR, one other worktree with a PR,
-// two running sub-agents and a plan file.
+// Where the made-up folders live: inside the throwaway home, never a real path.
+const exampleDir = (): string => join(homedir(), EXAMPLE_DIR_NAME);
+
+// A real, empty git folder with one new file, so the uncommitted-changes mark
+// has something to find. If git is missing the mark is simply not shown.
+function makeDirtyFolder(path: string): void {
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, "notes.txt"), "not committed yet\n");
+  try {
+    execFileSync("git", ["init", "-q"], { cwd: path, stdio: "ignore", env: { PATH: process.env.PATH ?? "", HOME: homedir() } });
+  } catch {
+    // no git: the preview just has no mark
+  }
+}
+
+// The made-up session: one branch with a PR and uncommitted changes, one other
+// worktree with a PR, two running sub-agents and a plan file.
 function seedSession(): void {
   addPR(SESSION, { number: CURRENT_PR_NUMBER, url: EXAMPLE_PR_URL + CURRENT_PR_NUMBER, branch: CURRENT_BRANCH });
   addPR(SESSION, { number: OTHER_PR_NUMBER, url: EXAMPLE_PR_URL + OTHER_PR_NUMBER, branch: OTHER_BRANCH });
-  addWorktree(SESSION, { path: join(EXAMPLE_DIR, OTHER_BRANCH), branch: OTHER_BRANCH });
+  addWorktree(SESSION, { path: join(exampleDir(), OTHER_BRANCH), branch: OTHER_BRANCH });
   addSubagent(SESSION, "a", { type: "Explore", desc: "", model: "Opus 4.8", startedAt: 0 });
   addSubagent(SESSION, "b", { type: "review", desc: "", model: "Sonnet 5", startedAt: 0 });
-  setPlan(SESSION, join(EXAMPLE_DIR, "plan.md"));
+  setPlan(SESSION, join(exampleDir(), "plan.md"));
 }
 
 // Runs inside the throwaway home (see previewFields): seeds the session and
 // draws the statusline once.
 export function renderPreviewSession(): void {
   seedSession();
-  const path = join(EXAMPLE_DIR, CURRENT_BRANCH);
+  const path = join(exampleDir(), CURRENT_BRANCH);
+  makeDirtyFolder(path);
   renderStatusline(
     JSON.stringify({
       session_id: SESSION,

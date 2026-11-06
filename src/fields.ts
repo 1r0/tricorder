@@ -35,7 +35,8 @@ export interface FieldInfo {
 const EVERY_ACCOUNT: readonly AccountType[] = ["subscription", "payg"];
 
 // Order here is the order the fields appear on the statusline, left to right,
-// then top to bottom (line 1: mute icon, location with its PR tags, context,
+// then top to bottom (line 1: mute icon, location with its uncommitted-changes
+// mark and PR tags, context,
 // model, plan link at the right edge; then the other-worktrees line, then the
 // sub-agents line). The start-up animation comes last: it only shows for the
 // first seconds. Setup lists the fields in this same order.
@@ -57,6 +58,16 @@ export const FIELDS = [
     shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
     sample: "my-repo(main)   or   🌳 fix-login",
     legend: "Clicking opens the folder, copies the path, or both (see worktreeClick in the config).",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true,
+  },
+  {
+    id: "dirty",
+    name: "Uncommitted changes",
+    line: "main",
+    shows: "A yellow * after the branch name when the folder has changes that are not committed yet (edited, staged or new files).",
+    sample: "my-repo(main*)   or   🌳 fix-login*",
+    legend: "Yellow *. Nothing is shown for a folder that is not a git repository.",
     appliesTo: EVERY_ACCOUNT,
     defaultOn: true,
   },

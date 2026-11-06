@@ -8,8 +8,8 @@ import { plain, readConfig, run, sandbox, writeConfig } from "./helpers";
 const CONTEXT_USED_PCT = 42; // hand check: 42% used shows as "🔋 42%"
 const ACCOUNT_SUBSCRIPTION = "subscription";
 const ACCOUNT_DIR_PREFIX = "tricorder-acct-";
-// Hand count for a subscription: 9 fields + "Enable all" = 10 options → 4, 4, 2.
-const SUBSCRIPTION = { fields: 9, optionCounts: [4, 4, 2] } as const;
+// Hand count for a subscription: 10 fields + "Enable all" = 11 options → 4, 4, 3.
+const SUBSCRIPTION = { fields: 10, optionCounts: [4, 4, 3] } as const;
 
 // A session-less payload (no session_id) so nothing is written to the state
 // folder. The folder is not a git repo, so the location shows as "🌳 <name>".
@@ -109,7 +109,7 @@ test("fields describe: lists fields with their explanation and on/off state", ()
   assert.equal(out.fields.find((f: { id: string }) => f.id === "context").enabled, false);
 });
 
-test("fields questions: for a subscription gives 3 questions (4, 4, 2 options) in one call", () => {
+test("fields questions: for a subscription gives 3 questions (4, 4, 3 options) in one call", () => {
   const box = sandbox();
   const out = JSON.parse(run(box, ["fields", "questions", ACCOUNT_SUBSCRIPTION]).stdout);
   assert.equal(out.calls.length, 1);
@@ -119,9 +119,9 @@ test("fields questions: for a subscription gives 3 questions (4, 4, 2 options) i
 
 // Hand check: the options follow the statusline's left-to-right order, with "Enable all" first.
 const QUESTION_LABELS_IN_ORDER = [
-  "Enable all", "Mute icon", "Location", "Pull requests",
-  "Context window", "Model", "Plan link", "Other worktrees",
-  "Sub-agents", "Start-up animation",
+  "Enable all", "Mute icon", "Location", "Uncommitted changes",
+  "Pull requests", "Context window", "Model", "Plan link",
+  "Other worktrees", "Sub-agents", "Start-up animation",
 ];
 
 test("fields questions: options are listed in the order the statusline draws the fields", () => {
@@ -132,12 +132,12 @@ test("fields questions: options are listed in the order the statusline draws the
 });
 
 // Hand check: with every field on, the made-up session shows these four lines.
-const PREVIEW_LINE_1_START = "🔇 🌳 fix-login (#12) · 🔋 42% · Opus 5.5";
+const PREVIEW_LINE_1_START = "🔇 🌳 fix-login* (#12) · 🔋 42% · Opus 5.5";
 const PREVIEW_LINE_1_END = "🗺️ plan";
 const PREVIEW_LINES = ["add-tests (#13)", "🤖 Explore Opus 4.8, review Sonnet 5"];
 const PREVIEW_SHIP = "o≡≡≡>";
 
-test("fields preview: with every field on, all nine fields are drawn, in catalogue order", () => {
+test("fields preview: with every field on, all ten fields are drawn, in catalogue order", () => {
   const box = sandbox();
   const lines = run(box, ["fields", "preview"]).stdout.trimEnd().split("\n");
   assert.ok(lines[0]?.startsWith(PREVIEW_LINE_1_START));

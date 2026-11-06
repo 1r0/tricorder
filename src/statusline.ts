@@ -11,7 +11,7 @@ import {
   setLabel,
   setModel,
 } from "./state";
-import { currentBranch } from "./git";
+import { currentBranch, isDirty } from "./git";
 
 // ---- payload shape (subset of the statusline stdin JSON) -------------------
 
@@ -187,15 +187,24 @@ function prSuffix(session: string, branch: string | null): string {
 
 // ---- segments --------------------------------------------------------------
 
-function locationSegment(loc: Location, session: string, mode: WorktreeClickMode, showPrs: boolean): string | null {
+interface LocationOptions {
+  readonly mode: WorktreeClickMode;
+  readonly showPrs: boolean;
+  // The folder has uncommitted changes: a yellow "*" goes after the branch.
+  readonly dirty: boolean;
+}
+
+function locationSegment(loc: Location, session: string, opts: LocationOptions): string | null {
   if (loc.path === "") return null;
+  const { mode, showPrs } = opts;
+  const mark = opts.dirty ? sgr(YELLOW, "*") : "";
   const prs = (branch: string | null): string => (showPrs ? prSuffix(session, branch) : "");
   if (loc.isWorktree) {
     const label = loc.branch ?? (basename(loc.path) || loc.path);
-    return worktreeLink(loc.path, ICON_TREE + " " + label, mode) + prs(loc.branch);
+    return worktreeLink(loc.path, ICON_TREE + " " + label + mark, mode) + prs(loc.branch);
   }
   if (loc.branch !== null) {
-    const label = (basename(loc.path) || loc.path) + "(" + loc.branch + ")";
+    const label = (basename(loc.path) || loc.path) + "(" + loc.branch + mark + ")";
     return worktreeLink(loc.path, label, mode) + prs(loc.branch);
   }
   // Non-git directory: today's fallback, no branch to show.
@@ -209,8 +218,10 @@ function terminalWidth(): number {
 // Each field can be switched off in the config (statusline.fields, see src/fields.ts).
 function line1(p: Payload, session: string, loc: Location, cfg: Config): string {
   const on = cfg.statusline.fields;
+  // git is only asked when the field is on, so switching it off also saves the call.
+  const dirty = on.location && on.dirty && loc.path !== "" && isDirty(loc.path) === true;
   const mid = [
-    on.location ? locationSegment(loc, session, cfg.worktreeClick, on.prs) : null,
+    on.location ? locationSegment(loc, session, { mode: cfg.worktreeClick, showPrs: on.prs, dirty }) : null,
     on.context ? contextSegment(p.context_window) : null,
     on.model ? (p.model?.display_name ?? null) : null,
   ]

@@ -14,6 +14,7 @@ The statusline shows, on multiple lines and only when there's something to show:
 ```
 
 - **Worktree / cwd** — a link whose click behavior is configurable (`worktreeClick` in config, default `open`): open it in the app associated with its extension via macOS LaunchServices (`file://`, no menu-bar app needed), copy the path to the clipboard, or both. Copy/both route through the menu-bar app, since a bare link can't write the clipboard on its own — see [Config](#config).
+- **Uncommitted changes** — a yellow `*` after the branch name (`my-repo(main*)`, or `🌳 fix-login*` in a worktree) when the folder has edited, staged or new files that are not committed. Nothing is shown outside a git repository. It runs `git status --porcelain` each time the statusline redraws; switch the `dirty` field off if that is slow in a very large repository.
 - **Context gauge** — percent only, colored green/yellow/red (green below 70%, yellow from 70%, red from 90%). It reports the truth; it cannot force a compact (the harness owns that).
 - **Model** — the current session model.
 - **PRs** — every PR created this session, each an `https` link.
@@ -78,7 +79,7 @@ Effective config lives at `~/.claude/tricorder/config.json`, seeded on first run
   "worktreeClick": "open",
   "statusline": {
     "mode": "auto",
-    "fields": { "muteIcon": true, "location": true, "prs": true, "context": true, "model": true,
+    "fields": { "muteIcon": true, "location": true, "dirty": true, "prs": true, "context": true, "model": true,
                 "plan": true, "worktrees": true, "subagents": true, "intro": true }
   },
   "sounds": {
