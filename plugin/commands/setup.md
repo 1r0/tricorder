@@ -31,7 +31,8 @@ If a command fails, show the error to the user and stop.
 
 Start with one sentence on what was detected, for example "I detected a Claude
 subscription account." If the type is `unknown`, say you could not tell and that
-you will list every field.
+you will list every field. If it is `payg`, say that spend is counted by
+tricorder as an estimate from the cost Claude Code reports for each session.
 
 Then show a table with one row per field, in the order the program gives them
 (that is the order they appear on the statusline, left to right, top to bottom): **name**, **what it shows**, **example**,
@@ -39,7 +40,38 @@ and **icons and colours** (leave the last cell empty when `legend` is empty).
 Use the `shows`, `sample` and `legend` text from the command; do not invent
 fields and do not mention fields that were not listed. Add which ones are on now.
 
-## 3. Ask which fields to show
+## 3. Monthly budget (pay per use only)
+
+Do this step only when `detect` said `payg`. For a subscription or `unknown`,
+skip to step 4 and do not mention a budget.
+
+A pay per use account has no usage limit to compare against, so the spend field
+compares this month's spending with a budget the user chooses. The budget is
+not a limit. Get the question from the program, do not write it yourself:
+
+```
+"${CLAUDE_PLUGIN_ROOT}/bin/tricorder" budget questions
+```
+
+It prints JSON with `question` and `values`. Ask `question` with one
+AskUserQuestion call, exactly as given. Then:
+
+- If the user picked one of the listed options, take its number or `off` from
+  `values` (keyed by the option label).
+- If the user chose "Other" and typed an amount, use what they typed
+  (for example `150` or `$150`).
+
+Save it with:
+
+```
+"${CLAUDE_PLUGIN_ROOT}/bin/tricorder" budget <number|off>
+```
+
+If the command refuses the amount, show its message and ask once more. Say what
+was saved ("no budget" or "$150 a month") and that it can be changed any time
+with `/tricorder:setup`.
+
+## 4. Ask which fields to show
 
 Get the questions from the program. Do not write them yourself:
 
@@ -67,7 +99,7 @@ Work out the answer from the labels the user ticked:
 If the question tool still reports invalid parameters, show the error to the
 user and stop. Do not change any setting.
 
-## 4. Save and show the result
+## 5. Save and show the result
 
 Run, with the chosen ids separated by commas, or `all` for "Enable all":
 

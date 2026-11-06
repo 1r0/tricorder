@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { loadConfig, type Config, type WorktreeClickMode } from "./config";
+import { loadConfig, SPEND_DIR, type Config, type WorktreeClickMode } from "./config";
 import {
   addWorktree,
   getPlan,
@@ -11,8 +11,10 @@ import {
   setLabel,
   setModel,
 } from "./state";
+import { detectAccount, resolveType } from "./account";
 import { currentBranch, isDirty } from "./git";
-import { elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, type PaceConfig } from "./pace";
+import { budgetBand, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, type PaceConfig } from "./pace";
+import { monthElapsedPct, monthSpendUsd, recordCost } from "./spend";
 
 // ---- payload shape (subset of the statusline stdin JSON) -------------------
 
@@ -49,6 +51,10 @@ interface RateLimits {
   readonly five_hour?: RateWindow;
   readonly seven_day?: RateWindow;
 }
+// What this session has cost so far, as Claude Code reports it, in US dollars.
+interface Cost {
+  readonly total_cost_usd?: number | null;
+}
 interface Payload {
   readonly session_id?: string;
   readonly cwd?: string;
@@ -57,6 +63,7 @@ interface Payload {
   readonly worktree?: Worktree;
   readonly context_window?: ContextWindow;
   readonly rate_limits?: RateLimits;
+  readonly cost?: Cost;
 }
 
 // ---- terminal formatting ---------------------------------------------------
@@ -127,6 +134,7 @@ const ICON_TREE = "🌳";
 const ICON_MAP = "🗺️";
 const ICON_CTX = "🔋";
 const ICON_ROBOT = "🤖";
+const ICON_MONEY = "💰";
 const SEP = " · ";
 const MARGIN = 1;
 const MINI_SHIP = "o≡≡≡>";
@@ -179,6 +187,41 @@ function usageSegment(label: string, win: RateWindow | undefined, windowS: numbe
   if (band === null) return label + " " + pct;
   const style = PACE_STYLES[band];
   return label + " " + style.icon + " " + sgr(style.color, pct);
+}
+
+// ---- monthly spend (pay per use) ---------------------------------------------
+
+// 62 → "$62", 62.4 → "$62.40": whole dollars without cents, otherwise two decimals.
+const CENT_DIGITS = 2;
+function usd(amount: number): string {
+  return "$" + (Number.isInteger(amount) ? amount : amount.toFixed(CENT_DIGITS));
+}
+
+// "💰 $62/$200 🐕 31%": this month's spend, the budget, an animal for the pace
+// and the share of the budget spent in the pace colour. With no budget only
+// "💰 $62.40". Nothing when the payload carries no cost or there is no session
+// to count it under. Showing it also adds the session's new cost to the month.
+function spendSegment(session: string, cost: Cost | undefined, budgetUsd: number | null, pace: PaceConfig, nowMs: number): string | null {
+  const costUsd = cost?.total_cost_usd;
+  if (session === "" || typeof costUsd !== "number") return null;
+  recordCost(SPEND_DIR, session, costUsd, nowMs);
+  const spent = monthSpendUsd(SPEND_DIR, nowMs);
+  if (budgetUsd === null) return ICON_MONEY + " " + usd(spent);
+  const usedPct = (spent / budgetUsd) * PCT_MAX;
+  const label = ICON_MONEY + " " + usd(spent) + "/" + usd(budgetUsd);
+  const band = budgetBand(usedPct, monthElapsedPct(nowMs), pace);
+  if (band === null) return label + " " + Math.round(usedPct) + "%";
+  const style = PACE_STYLES[band];
+  return label + " " + style.icon + " " + sgr(style.color, Math.round(usedPct) + "%");
+}
+
+// Claude Code sends a cost on every account, a notional one on subscriptions, so
+// the payload alone cannot say whether "spend" makes sense. It is shown for
+// pay-per-use accounts. If the account type could not be detected, it is shown
+// only when the payload has no usage limits (subscriptions have them).
+function spendApplies(cfg: Config, p: Payload): boolean {
+  const type = resolveType(cfg.statusline.mode, detectAccount().type);
+  return type === "payg" || (type === "unknown" && p.rate_limits === undefined);
 }
 
 // ---- location (worktree / branch) + PR matching -----------------------------
@@ -257,6 +300,7 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
     on.model ? (p.model?.display_name ?? null) : null,
     on.usage5h ? usageSegment("5h", p.rate_limits?.five_hour, FIVE_HOUR_WINDOW_S, nowS, cfg.statusline.pace) : null,
     on.usage7d ? usageSegment("7d", p.rate_limits?.seven_day, SEVEN_DAY_WINDOW_S, nowS, cfg.statusline.pace) : null,
+    on.spend && spendApplies(cfg, p) ? spendSegment(session, p.cost, cfg.statusline.budget.monthlyUsd, cfg.statusline.pace, nowS * MS_PER_S) : null,
   ]
     .filter((s): s is string => s !== null && s !== "")
     .join(SEP);

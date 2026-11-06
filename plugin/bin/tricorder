@@ -13,7 +13,7 @@ function readStdin() {
 }
 
 // src/statusline.ts
-var import_node_path3 = require("node:path");
+var import_node_path5 = require("node:path");
 
 // src/config.ts
 var import_node_os = require("node:os");
@@ -29,7 +29,9 @@ function isAccountMode(value) {
 }
 var EVERY_ACCOUNT = [SUBSCRIPTION, PAYG];
 var SUBSCRIPTION_ONLY = [SUBSCRIPTION];
+var PAYG_ONLY = [PAYG];
 var PACE_LEGEND = "The animal and the colour compare your use with the time gone in the window: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = limit reached. In the first 3% of a window it is too early to tell, so a \u{1F9A5} sloth (grey) shows instead. (Margin and 3% are settings: statusline.pace.)";
+var SPEND_LEGEND = "\u{1F4B0} = spend this month, in US dollars (calendar month, UTC). With a budget the animal and the colour compare the share of the budget spent with the share of the month gone: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = over budget (more than 100% spent), \u{1F9A5} grey = the first 3% of the month, too early to tell. The budget is not a limit. The figure is an estimate kept by tricorder: it misses sessions without a statusline, other machines and other tools using the same key.";
 var FIELDS = [
   {
     id: "muteIcon",
@@ -109,6 +111,16 @@ var FIELDS = [
     sample: "7d \u{1F422} 12%",
     legend: PACE_LEGEND,
     appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true
+  },
+  {
+    id: "spend",
+    name: "Monthly spend",
+    line: "main",
+    shows: "What you have spent this month on Claude usage (an estimate), and, if you set a monthly budget, how that compares with an even spread of the budget over the month.",
+    sample: "\u{1F4B0} $62/$200 \u{1F415} 31%   (no budget set: \u{1F4B0} $62)",
+    legend: SPEND_LEGEND,
+    appliesTo: PAYG_ONLY,
     defaultOn: true
   },
   {
@@ -192,11 +204,16 @@ function bandForDeviation(deviationPts, marginPts) {
   if (deviationPts <= WATCH_OUT_MARGINS * marginPts) return "watchOut";
   return "hot";
 }
-function limitBand(usedPct, elapsed, cfg) {
-  if (usedPct >= PCT_MAX) return "over";
+function paceBand(usedPct, elapsed, cfg) {
   if (elapsed === null || elapsed > PCT_MAX) return null;
   if (elapsed < cfg.minElapsedPct) return "early";
   return bandForDeviation(usedPct - elapsed, cfg.marginPts);
+}
+function budgetBand(usedPct, elapsed, cfg) {
+  return usedPct > PCT_MAX ? "over" : paceBand(usedPct, elapsed, cfg);
+}
+function limitBand(usedPct, elapsed, cfg) {
+  return usedPct >= PCT_MAX ? "over" : paceBand(usedPct, elapsed, cfg);
 }
 
 // src/config.ts
@@ -205,6 +222,7 @@ var DATA_DIR = (0, import_node_path.join)((0, import_node_os.homedir)(), ".claud
 var CONFIG_PATH = (0, import_node_path.join)(DATA_DIR, "config.json");
 var STATE_DIR = (0, import_node_path.join)(DATA_DIR, "state");
 var SOUNDS_DIR = (0, import_node_path.join)(DATA_DIR, "sounds");
+var SPEND_DIR = (0, import_node_path.join)(DATA_DIR, "spend");
 var QUESTION_SOUND = (0, import_node_path.join)(SOUNDS_DIR, "please-specify.mp3");
 var PERMISSION_SOUND = (0, import_node_path.join)(SOUNDS_DIR, "security-authorisation.mp3");
 var STOP_SOUND = (0, import_node_path.join)(SOUNDS_DIR, "transporter-complete.mp3");
@@ -218,7 +236,7 @@ var DEFAULT_CONFIG = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields(), mode: "auto", pace: DEFAULT_PACE },
+  statusline: { fields: defaultFields(), mode: "auto", pace: DEFAULT_PACE, budget: { monthlyUsd: null } },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -262,12 +280,16 @@ function mergePace(base, given) {
     minElapsedPct: isShareBelowMax(g.minElapsedPct) ? g.minElapsedPct : base.minElapsedPct
   };
 }
+function mergeBudget(given) {
+  const value = given?.monthlyUsd;
+  return { monthlyUsd: isPositive(value) ? value : null };
+}
 function mergeStatusline(base, override) {
   const given = override?.fields;
   const fields2 = Object.fromEntries(
     FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]])
   );
-  return { fields: fields2, mode: isAccountMode(override?.mode) ? override.mode : base.mode, pace: mergePace(base.pace, override?.pace) };
+  return { fields: fields2, mode: isAccountMode(override?.mode) ? override.mode : base.mode, pace: mergePace(base.pace, override?.pace), budget: mergeBudget(override?.budget) };
 }
 function mergeConfig(base, override) {
   const events = Object.keys(base.sounds);
@@ -476,6 +498,40 @@ function debugDump(name, raw) {
   }
 }
 
+// src/account.ts
+var import_node_fs4 = require("node:fs");
+var import_node_path3 = require("node:path");
+var UNKNOWN_ACCOUNT = { type: "unknown", plan: null, extraUsage: false };
+function classify(parsed) {
+  if (typeof parsed !== "object" || parsed === null) return UNKNOWN_ACCOUNT;
+  const oauth = parsed.oauthAccount;
+  if (typeof oauth !== "object" || oauth === null) return { type: "payg", plan: null, extraUsage: false };
+  const account = oauth;
+  return {
+    type: "subscription",
+    plan: typeof account.organizationType === "string" ? account.organizationType : null,
+    extraUsage: account.hasExtraUsageEnabled === true
+  };
+}
+function accountFilePath() {
+  const dir = process.env.CLAUDE_CONFIG_DIR;
+  if (dir !== void 0 && dir !== "") return (0, import_node_path3.join)(dir, ".claude.json");
+  const home = process.env.HOME;
+  return home === void 0 || home === "" ? null : (0, import_node_path3.join)(home, ".claude.json");
+}
+function detectAccount() {
+  const file = accountFilePath();
+  if (file === null) return UNKNOWN_ACCOUNT;
+  try {
+    return classify(JSON.parse((0, import_node_fs4.readFileSync)(file, "utf8")));
+  } catch {
+    return UNKNOWN_ACCOUNT;
+  }
+}
+function resolveType(mode, detected) {
+  return mode === "auto" ? detected : mode;
+}
+
 // src/git.ts
 var import_node_child_process = require("node:child_process");
 var GIT_TIMEOUT_MS = 500;
@@ -544,6 +600,63 @@ function worktreeList(cwd) {
   return flush(out.split("\n").reduce(parseLine, EMPTY_STATE)).entries;
 }
 
+// src/spend.ts
+var import_node_fs5 = require("node:fs");
+var import_node_path4 = require("node:path");
+var MONTH_KEY_DIGITS = 2;
+var FIRST_DAY = 1;
+var MONTH_INDEX_TO_NUMBER = 1;
+var COST_FILE_EXT = ".json";
+var NO_COST = 0;
+var LAST_COST_DIR = "last";
+function monthKey(nowMs) {
+  const d = new Date(nowMs);
+  return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + MONTH_INDEX_TO_NUMBER).padStart(MONTH_KEY_DIGITS, "0");
+}
+var monthStartMs = (nowMs) => {
+  const d = new Date(nowMs);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), FIRST_DAY);
+};
+var nextMonthStartMs = (nowMs) => {
+  const d = new Date(nowMs);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + MONTH_INDEX_TO_NUMBER, FIRST_DAY);
+};
+function monthElapsedPct(nowMs) {
+  return (nowMs - monthStartMs(nowMs)) / (nextMonthStartMs(nowMs) - monthStartMs(nowMs)) * PCT_MAX;
+}
+var UNSAFE_FILE_CHARS = /[^A-Za-z0-9._-]/g;
+var sanitize2 = (id) => id.replace(UNSAFE_FILE_CHARS, "_");
+function readNumber(path, field, fallback) {
+  try {
+    const value = JSON.parse((0, import_node_fs5.readFileSync)(path, "utf8"))[field];
+    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeJson(path, value) {
+  (0, import_node_fs5.mkdirSync)((0, import_node_path4.join)(path, ".."), { recursive: true });
+  (0, import_node_fs5.writeFileSync)(path, JSON.stringify(value));
+}
+function recordCost(dir, sessionId, costUsd, nowMs) {
+  if (!Number.isFinite(costUsd) || costUsd < 0) return;
+  const id = sanitize2(sessionId);
+  const lastPath = (0, import_node_path4.join)(dir, LAST_COST_DIR, id + COST_FILE_EXT);
+  const last = readNumber(lastPath, "lastCostUsd", NO_COST);
+  if (costUsd === last) return;
+  const added = costUsd >= last ? costUsd - last : costUsd;
+  const monthPath = (0, import_node_path4.join)(dir, monthKey(nowMs), id + COST_FILE_EXT);
+  const before = readNumber(monthPath, "usd", NO_COST);
+  const record = { usd: before + added };
+  writeJson(monthPath, record);
+  writeJson(lastPath, { lastCostUsd: costUsd });
+}
+function monthSpendUsd(dir, nowMs) {
+  const monthDir = (0, import_node_path4.join)(dir, monthKey(nowMs));
+  if (!(0, import_node_fs5.existsSync)(monthDir)) return 0;
+  return (0, import_node_fs5.readdirSync)(monthDir).filter((name) => name.endsWith(COST_FILE_EXT)).reduce((sum, name) => sum + readNumber((0, import_node_path4.join)(monthDir, name), "usd", NO_COST), NO_COST);
+}
+
 // src/statusline.ts
 var ESC = "\x1B";
 var BEL = "\x07";
@@ -590,6 +703,7 @@ var ICON_TREE = "\u{1F333}";
 var ICON_MAP = "\u{1F5FA}\uFE0F";
 var ICON_CTX = "\u{1F50B}";
 var ICON_ROBOT = "\u{1F916}";
+var ICON_MONEY = "\u{1F4B0}";
 var SEP = " \xB7 ";
 var MARGIN = 1;
 var MINI_SHIP = "o\u2261\u2261\u2261>";
@@ -632,13 +746,34 @@ function usageSegment(label, win, windowS, nowS, pace) {
   const style = PACE_STYLES[band];
   return label + " " + style.icon + " " + sgr(style.color, pct);
 }
+var CENT_DIGITS = 2;
+function usd(amount) {
+  return "$" + (Number.isInteger(amount) ? amount : amount.toFixed(CENT_DIGITS));
+}
+function spendSegment(session, cost, budgetUsd, pace, nowMs) {
+  const costUsd = cost?.total_cost_usd;
+  if (session === "" || typeof costUsd !== "number") return null;
+  recordCost(SPEND_DIR, session, costUsd, nowMs);
+  const spent = monthSpendUsd(SPEND_DIR, nowMs);
+  if (budgetUsd === null) return ICON_MONEY + " " + usd(spent);
+  const usedPct = spent / budgetUsd * PCT_MAX2;
+  const label = ICON_MONEY + " " + usd(spent) + "/" + usd(budgetUsd);
+  const band = budgetBand(usedPct, monthElapsedPct(nowMs), pace);
+  if (band === null) return label + " " + Math.round(usedPct) + "%";
+  const style = PACE_STYLES[band];
+  return label + " " + style.icon + " " + sgr(style.color, Math.round(usedPct) + "%");
+}
+function spendApplies(cfg, p) {
+  const type = resolveType(cfg.statusline.mode, detectAccount().type);
+  return type === "payg" || type === "unknown" && p.rate_limits === void 0;
+}
 function resolveLocation(p, session) {
   const wt = p.worktree;
   const path = wt?.path ?? p.workspace?.current_dir ?? p.cwd ?? "";
   if (path === "") return { path, branch: null, isWorktree: false };
   const gitWorktree = p.workspace?.git_worktree;
   if (wt !== void 0 || gitWorktree !== void 0) {
-    const branch = wt?.branch ?? wt?.name ?? gitWorktree ?? ((0, import_node_path3.basename)(path) || path);
+    const branch = wt?.branch ?? wt?.name ?? gitWorktree ?? ((0, import_node_path5.basename)(path) || path);
     if (session !== "") addWorktree(session, { path, branch });
     return { path, branch, isWorktree: true };
   }
@@ -654,14 +789,14 @@ function locationSegment(loc, session, opts) {
   const mark = opts.dirty ? sgr(YELLOW, "*") : "";
   const prs = (branch) => showPrs ? prSuffix(session, branch) : "";
   if (loc.isWorktree) {
-    const label = loc.branch ?? ((0, import_node_path3.basename)(loc.path) || loc.path);
+    const label = loc.branch ?? ((0, import_node_path5.basename)(loc.path) || loc.path);
     return worktreeLink(loc.path, ICON_TREE + " " + label + mark, mode) + prs(loc.branch);
   }
   if (loc.branch !== null) {
-    const label = ((0, import_node_path3.basename)(loc.path) || loc.path) + "(" + loc.branch + mark + ")";
+    const label = ((0, import_node_path5.basename)(loc.path) || loc.path) + "(" + loc.branch + mark + ")";
     return worktreeLink(loc.path, label, mode) + prs(loc.branch);
   }
-  return worktreeLink(loc.path, ICON_TREE + " " + ((0, import_node_path3.basename)(loc.path) || loc.path), mode);
+  return worktreeLink(loc.path, ICON_TREE + " " + ((0, import_node_path5.basename)(loc.path) || loc.path), mode);
 }
 function terminalWidth() {
   return Number(process.env.COLUMNS) || (process.stdout.columns ?? 0);
@@ -675,7 +810,8 @@ function line1(p, session, loc, cfg) {
     on.context ? contextSegment(p.context_window) : null,
     on.model ? p.model?.display_name ?? null : null,
     on.usage5h ? usageSegment("5h", p.rate_limits?.five_hour, FIVE_HOUR_WINDOW_S, nowS, cfg.statusline.pace) : null,
-    on.usage7d ? usageSegment("7d", p.rate_limits?.seven_day, SEVEN_DAY_WINDOW_S, nowS, cfg.statusline.pace) : null
+    on.usage7d ? usageSegment("7d", p.rate_limits?.seven_day, SEVEN_DAY_WINDOW_S, nowS, cfg.statusline.pace) : null,
+    on.spend && spendApplies(cfg, p) ? spendSegment(session, p.cost, cfg.statusline.budget.monthlyUsd, cfg.statusline.pace, nowS * MS_PER_S) : null
   ].filter((s) => s !== null && s !== "").join(SEP);
   const showMute = cfg.muted && on.muteIcon;
   const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
@@ -721,7 +857,7 @@ function renderStatusline(raw) {
   if (hasSession && model !== void 0 && model !== "") setModel(session, model);
   const loc = resolveLocation(payload, session);
   if (hasSession) {
-    setLabel(session, loc.branch ?? ((0, import_node_path3.basename)(loc.path) || session));
+    setLabel(session, loc.branch ?? ((0, import_node_path5.basename)(loc.path) || session));
     const iterm = process.env.ITERM_SESSION_ID;
     if (iterm !== void 0 && iterm !== "") setItermId(session, iterm);
   }
@@ -744,7 +880,7 @@ function renderStatusline(raw) {
 
 // src/capture.ts
 var import_node_buffer = require("node:buffer");
-var import_node_path5 = require("node:path");
+var import_node_path7 = require("node:path");
 
 // src/iterm.ts
 var import_node_child_process2 = require("node:child_process");
@@ -777,9 +913,9 @@ function publish(vars) {
 }
 
 // src/log.ts
-var import_node_fs4 = require("node:fs");
-var import_node_path4 = require("node:path");
-var LOG_PATH = (0, import_node_path4.join)(DATA_DIR, "tricorder.log");
+var import_node_fs6 = require("node:fs");
+var import_node_path6 = require("node:path");
+var LOG_PATH = (0, import_node_path6.join)(DATA_DIR, "tricorder.log");
 var TAIL_DEFAULT = 40;
 var MAX_LOG_BYTES = 524288;
 var KEEP_LINES = 2e3;
@@ -789,18 +925,18 @@ function stamp() {
 function log(line) {
   try {
     ensureDir(DATA_DIR);
-    if ((0, import_node_fs4.existsSync)(LOG_PATH) && (0, import_node_fs4.statSync)(LOG_PATH).size > MAX_LOG_BYTES) {
-      const kept = (0, import_node_fs4.readFileSync)(LOG_PATH, "utf8").split("\n").slice(-KEEP_LINES).join("\n");
-      (0, import_node_fs4.writeFileSync)(LOG_PATH, kept);
+    if ((0, import_node_fs6.existsSync)(LOG_PATH) && (0, import_node_fs6.statSync)(LOG_PATH).size > MAX_LOG_BYTES) {
+      const kept = (0, import_node_fs6.readFileSync)(LOG_PATH, "utf8").split("\n").slice(-KEEP_LINES).join("\n");
+      (0, import_node_fs6.writeFileSync)(LOG_PATH, kept);
     }
-    (0, import_node_fs4.appendFileSync)(LOG_PATH, stamp() + " " + line + "\n");
+    (0, import_node_fs6.appendFileSync)(LOG_PATH, stamp() + " " + line + "\n");
   } catch {
   }
 }
 function showLogs(arg) {
   if (arg === "clear") {
     try {
-      (0, import_node_fs4.writeFileSync)(LOG_PATH, "");
+      (0, import_node_fs6.writeFileSync)(LOG_PATH, "");
     } catch {
     }
     process.stdout.write("cleared " + LOG_PATH + "\n");
@@ -808,7 +944,7 @@ function showLogs(arg) {
   }
   const n = Number(arg) || TAIL_DEFAULT;
   try {
-    const lines = (0, import_node_fs4.readFileSync)(LOG_PATH, "utf8").split("\n").filter((l) => l !== "");
+    const lines = (0, import_node_fs6.readFileSync)(LOG_PATH, "utf8").split("\n").filter((l) => l !== "");
     process.stdout.write(lines.slice(-n).join("\n") + "\n");
   } catch {
     process.stdout.write("(no log yet at " + LOG_PATH + ")\n");
@@ -895,9 +1031,9 @@ function handlePR(session, input) {
 function handleEnterWorktree(session, input) {
   const target = str(input.tool_input?.path) || str(input.tool_input?.name);
   if (target === "" || !input.cwd) return "no worktree target";
-  const name = (0, import_node_path5.basename)(target);
+  const name = (0, import_node_path7.basename)(target);
   const entries = worktreeList(input.cwd);
-  const match = entries.find((e) => e.branch === name || (0, import_node_path5.basename)(e.path) === name);
+  const match = entries.find((e) => e.branch === name || (0, import_node_path7.basename)(e.path) === name);
   addWorktree(session, { path: match?.path ?? target, branch: match?.branch ?? name });
   return "worktree " + name;
 }
@@ -905,7 +1041,7 @@ function handlePlan(session, input) {
   const fp = str(input.tool_input?.file_path);
   if (!PLAN_PATH_RE.test(fp)) return "not a plan path";
   setPlan(session, fp);
-  return "plan " + (0, import_node_path5.basename)(fp);
+  return "plan " + (0, import_node_path7.basename)(fp);
 }
 function route(session, input) {
   const event = str(input.hook_event_name);
@@ -947,7 +1083,7 @@ function publishState(session) {
   publish({
     tricorder_prs: prs.map((p) => p.number === null ? "PR" : "#" + p.number).join(" "),
     tricorder_subagents: subs.length === 0 ? "" : String(subs.length),
-    tricorder_plan: plan === null ? "" : (0, import_node_path5.basename)(plan)
+    tricorder_plan: plan === null ? "" : (0, import_node_path7.basename)(plan)
   });
 }
 function parse2(raw) {
@@ -970,7 +1106,7 @@ function capture(raw) {
     if (iterm !== void 0 && iterm !== "") setItermId(session, iterm);
     if (input.cwd !== void 0 && input.cwd !== "") {
       setCwd(session, input.cwd);
-      setLabelIfAbsent(session, (0, import_node_path5.basename)(input.cwd) || session.slice(0, LABEL_FALLBACK_LEN));
+      setLabelIfAbsent(session, (0, import_node_path7.basename)(input.cwd) || session.slice(0, LABEL_FALLBACK_LEN));
     }
   }
   const reaction = route(session, input);
@@ -983,35 +1119,35 @@ function capture(raw) {
 
 // src/sound.ts
 var import_node_child_process3 = require("node:child_process");
-var import_node_fs5 = require("node:fs");
-var import_node_path6 = require("node:path");
+var import_node_fs7 = require("node:fs");
+var import_node_path8 = require("node:path");
 var AFPLAY = "/usr/bin/afplay";
 var VALID_EVENTS = ["question", "permission", "stop", "plan"];
 var DEBOUNCE_MS = 1500;
-var LAST_SOUND_FILE = (0, import_node_path6.join)(DATA_DIR, ".last-sound");
+var LAST_SOUND_FILE = (0, import_node_path8.join)(DATA_DIR, ".last-sound");
 function isSoundEvent(value) {
   return value !== void 0 && VALID_EVENTS.includes(value);
 }
 function ensureBundledSounds() {
   const root = process.env.CLAUDE_PLUGIN_ROOT;
   if (root === void 0) return;
-  const from = (0, import_node_path6.join)(root, "sounds");
-  if (!(0, import_node_fs5.existsSync)(from)) return;
+  const from = (0, import_node_path8.join)(root, "sounds");
+  if (!(0, import_node_fs7.existsSync)(from)) return;
   ensureDir(SOUNDS_DIR);
-  (0, import_node_fs5.readdirSync)(from).filter((name) => !(0, import_node_fs5.existsSync)((0, import_node_path6.join)(SOUNDS_DIR, name))).forEach((name) => {
-    (0, import_node_fs5.copyFileSync)((0, import_node_path6.join)(from, name), (0, import_node_path6.join)(SOUNDS_DIR, name));
+  (0, import_node_fs7.readdirSync)(from).filter((name) => !(0, import_node_fs7.existsSync)((0, import_node_path8.join)(SOUNDS_DIR, name))).forEach((name) => {
+    (0, import_node_fs7.copyFileSync)((0, import_node_path8.join)(from, name), (0, import_node_path8.join)(SOUNDS_DIR, name));
   });
 }
 function debounced() {
   const now = Date.now();
   try {
-    const last = Number((0, import_node_fs5.readFileSync)(LAST_SOUND_FILE, "utf8").trim());
+    const last = Number((0, import_node_fs7.readFileSync)(LAST_SOUND_FILE, "utf8").trim());
     if (Number.isFinite(last) && now - last < DEBOUNCE_MS) return true;
   } catch {
   }
   try {
     ensureDir(DATA_DIR);
-    (0, import_node_fs5.writeFileSync)(LAST_SOUND_FILE, String(now));
+    (0, import_node_fs7.writeFileSync)(LAST_SOUND_FILE, String(now));
   } catch {
   }
   return false;
@@ -1043,7 +1179,7 @@ function playSound(eventArg, raw) {
     log("sound " + eventArg + " \u2192 disabled, skip");
     return;
   }
-  if (!(0, import_node_fs5.existsSync)(entry.file)) {
+  if (!(0, import_node_fs7.existsSync)(entry.file)) {
     log("sound " + eventArg + " \u2192 missing file " + entry.file);
     return;
   }
@@ -1084,7 +1220,7 @@ function mute(arg) {
 }
 
 // src/warp.ts
-var import_node_fs6 = require("node:fs");
+var import_node_fs8 = require("node:fs");
 var SHIP = [
   "                                                  ______",
   "                                     ___.--------'------`---------.____",
@@ -1133,7 +1269,7 @@ function warp() {
     fd = STDOUT_FD;
   } else {
     try {
-      fd = (0, import_node_fs6.openSync)("/dev/tty", "w");
+      fd = (0, import_node_fs8.openSync)("/dev/tty", "w");
     } catch {
       return;
     }
@@ -1144,18 +1280,18 @@ function warp() {
   const frameCount = Math.ceil((cols + shipWidth) / STEP);
   const offsets = Array.from({ length: frameCount }, (_, i) => -shipWidth + i * STEP);
   try {
-    (0, import_node_fs6.writeSync)(fd, HIDE_CURSOR + "\n".repeat(rows));
+    (0, import_node_fs8.writeSync)(fd, HIDE_CURSOR + "\n".repeat(rows));
     offsets.forEach((offset) => {
-      (0, import_node_fs6.writeSync)(fd, frame(offset, cols, rows));
+      (0, import_node_fs8.writeSync)(fd, frame(offset, cols, rows));
       sleep(FRAME_MS);
     });
     const blanks = SHIP.map(() => "\r" + CLEAR_LINE).join("\n") + "\n";
-    (0, import_node_fs6.writeSync)(fd, up(rows) + blanks + SHOW_CURSOR);
+    (0, import_node_fs8.writeSync)(fd, up(rows) + blanks + SHOW_CURSOR);
   } catch {
   } finally {
     if (!useStdout) {
       try {
-        (0, import_node_fs6.closeSync)(fd);
+        (0, import_node_fs8.closeSync)(fd);
       } catch {
       }
     }
@@ -1219,8 +1355,8 @@ function soundEnable(event, arg) {
 }
 
 // src/catalog.ts
-var import_node_fs7 = require("node:fs");
-var import_node_path7 = require("node:path");
+var import_node_fs9 = require("node:fs");
+var import_node_path9 = require("node:path");
 var SOUND_EVENTS2 = ["question", "permission", "stop", "plan"];
 var ALLOWED_HOSTS = /* @__PURE__ */ new Set(["www.trekcore.com", "trekcore.com"]);
 var BYTES_PER_KB = 1024;
@@ -1237,8 +1373,8 @@ function sanitizeFilename(name) {
   return cleaned === "" ? "clip" : cleaned;
 }
 function deriveFilename(url, name) {
-  const base = name !== void 0 && name !== "" ? sanitizeFilename(name) : sanitizeFilename((0, import_node_path7.basename)(url.pathname));
-  const ext = (0, import_node_path7.extname)(url.pathname) || DEFAULT_EXT;
+  const base = name !== void 0 && name !== "" ? sanitizeFilename(name) : sanitizeFilename((0, import_node_path9.basename)(url.pathname));
+  const ext = (0, import_node_path9.extname)(url.pathname) || DEFAULT_EXT;
   return base + ext;
 }
 async function soundSet(eventArg, urlArg, nameArg) {
@@ -1279,8 +1415,8 @@ async function soundSet(eventArg, urlArg, nameArg) {
   }
   ensureDir(SOUNDS_DIR);
   const filename = deriveFilename(url, nameArg);
-  const dest = (0, import_node_path7.join)(SOUNDS_DIR, filename);
-  (0, import_node_fs7.writeFileSync)(dest, Buffer.from(bytes));
+  const dest = (0, import_node_path9.join)(SOUNDS_DIR, filename);
+  (0, import_node_fs9.writeFileSync)(dest, Buffer.from(bytes));
   const cfg = loadConfig();
   const sounds = { ...cfg.sounds, [eventArg]: { enabled: true, file: dest } };
   saveConfig({ ...cfg, sounds });
@@ -1300,45 +1436,58 @@ function worktreeClick(arg) {
   process.stdout.write(mode + "\n");
 }
 
-// src/account.ts
-var import_node_fs8 = require("node:fs");
-var import_node_path8 = require("node:path");
-var UNKNOWN_ACCOUNT = { type: "unknown", plan: null, extraUsage: false };
-function classify(parsed) {
-  if (typeof parsed !== "object" || parsed === null) return UNKNOWN_ACCOUNT;
-  const oauth = parsed.oauthAccount;
-  if (typeof oauth !== "object" || oauth === null) return { type: "payg", plan: null, extraUsage: false };
-  const account = oauth;
-  return {
-    type: "subscription",
-    plan: typeof account.organizationType === "string" ? account.organizationType : null,
-    extraUsage: account.hasExtraUsageEnabled === true
+// src/budgetcmd.ts
+var OFF_WORDS = ["off", "none", "no"];
+var PRESETS = [
+  { label: "$50 / month", value: "50" },
+  { label: "$100 / month", value: "100" },
+  { label: "$200 / month", value: "200" },
+  { label: "No budget", value: "off" }
+];
+var AMOUNT_NOISE = /[$,\s]/g;
+function parseAmount(text) {
+  const n = Number(text.replace(AMOUNT_NOISE, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function describe(monthlyUsd) {
+  return monthlyUsd === null ? "no budget" : "$" + monthlyUsd + " a month";
+}
+function budgetQuestions() {
+  const question = {
+    question: "What is your monthly budget for Claude usage, in US dollars? It is not a limit: it only sets how fast spending counts as too fast. Choose Other to type a different amount.",
+    header: "Budget",
+    multiSelect: false,
+    options: PRESETS.map((p) => ({
+      label: p.label,
+      description: p.value === "off" ? "Show only what has been spent this month." : "Compare spending with $" + p.value + " a month."
+    }))
   };
+  const values = Object.fromEntries(PRESETS.map((p) => [p.label, p.value]));
+  process.stdout.write(serialize({ question, values }));
 }
-function accountFilePath() {
-  const dir = process.env.CLAUDE_CONFIG_DIR;
-  if (dir !== void 0 && dir !== "") return (0, import_node_path8.join)(dir, ".claude.json");
-  const home = process.env.HOME;
-  return home === void 0 || home === "" ? null : (0, import_node_path8.join)(home, ".claude.json");
-}
-function detectAccount() {
-  const file = accountFilePath();
-  if (file === null) return UNKNOWN_ACCOUNT;
-  try {
-    return classify(JSON.parse((0, import_node_fs8.readFileSync)(file, "utf8")));
-  } catch {
-    return UNKNOWN_ACCOUNT;
+function budget(arg) {
+  const cfg = loadConfig();
+  if (arg === void 0) {
+    process.stdout.write(describe(cfg.statusline.budget.monthlyUsd) + "\n");
+    return;
   }
-}
-function resolveType(mode, detected) {
-  return mode === "auto" ? detected : mode;
+  if (arg === "questions") return budgetQuestions();
+  const monthlyUsd = OFF_WORDS.includes(arg.toLowerCase()) ? null : parseAmount(arg);
+  if (monthlyUsd === null && !OFF_WORDS.includes(arg.toLowerCase())) {
+    process.stderr.write("tricorder: budget must be a positive number of dollars, or 'off'\n");
+    process.exitCode = 1;
+    return;
+  }
+  saveConfig({ ...cfg, statusline: { ...cfg.statusline, budget: { monthlyUsd } } });
+  log("budget \u2192 " + describe(monthlyUsd));
+  process.stdout.write(describe(monthlyUsd) + "\n");
 }
 
 // src/preview.ts
 var import_node_child_process4 = require("node:child_process");
-var import_node_fs9 = require("node:fs");
+var import_node_fs10 = require("node:fs");
 var import_node_os2 = require("node:os");
-var import_node_path9 = require("node:path");
+var import_node_path10 = require("node:path");
 var SESSION = "preview";
 var EXAMPLE_DIR_NAME = "example";
 var EXAMPLE_PR_URL = "https://example.invalid/pull/";
@@ -1355,13 +1504,15 @@ var FIVE_HOUR_USED_PCT = 37;
 var FIVE_HOUR_ELAPSED_PCT = 40;
 var SEVEN_DAY_USED_PCT = 12;
 var SEVEN_DAY_ELAPSED_PCT = 50;
+var EXAMPLE_BUDGET_USD = 200;
+var CENTS_PER_USD = 100;
 function resetsAt(elapsedPct2, windowS) {
   return Date.now() / MS_PER_S2 + (1 - elapsedPct2 / PCT_MAX) * windowS;
 }
-var exampleDir = () => (0, import_node_path9.join)((0, import_node_os2.homedir)(), EXAMPLE_DIR_NAME);
+var exampleDir = () => (0, import_node_path10.join)((0, import_node_os2.homedir)(), EXAMPLE_DIR_NAME);
 function makeDirtyFolder(path) {
-  (0, import_node_fs9.mkdirSync)(path, { recursive: true });
-  (0, import_node_fs9.writeFileSync)((0, import_node_path9.join)(path, "notes.txt"), "not committed yet\n");
+  (0, import_node_fs10.mkdirSync)(path, { recursive: true });
+  (0, import_node_fs10.writeFileSync)((0, import_node_path10.join)(path, "notes.txt"), "not committed yet\n");
   try {
     (0, import_node_child_process4.execFileSync)("git", ["init", "-q"], { cwd: path, stdio: "ignore", env: { PATH: process.env.PATH ?? "", HOME: (0, import_node_os2.homedir)() } });
   } catch {
@@ -1370,15 +1521,20 @@ function makeDirtyFolder(path) {
 function seedSession() {
   addPR(SESSION, { number: CURRENT_PR_NUMBER, url: EXAMPLE_PR_URL + CURRENT_PR_NUMBER, branch: CURRENT_BRANCH });
   addPR(SESSION, { number: OTHER_PR_NUMBER, url: EXAMPLE_PR_URL + OTHER_PR_NUMBER, branch: OTHER_BRANCH });
-  addWorktree(SESSION, { path: (0, import_node_path9.join)(exampleDir(), OTHER_BRANCH), branch: OTHER_BRANCH });
+  addWorktree(SESSION, { path: (0, import_node_path10.join)(exampleDir(), OTHER_BRANCH), branch: OTHER_BRANCH });
   addSubagent(SESSION, "a", { type: "Explore", desc: "", model: "Opus 4.8", startedAt: 0 });
   addSubagent(SESSION, "b", { type: "review", desc: "", model: "Sonnet 5", startedAt: 0 });
-  setPlan(SESSION, (0, import_node_path9.join)(exampleDir(), "plan.md"));
+  setPlan(SESSION, (0, import_node_path10.join)(exampleDir(), "plan.md"));
+}
+function evenPaceSpendUsd() {
+  const spent = EXAMPLE_BUDGET_USD * monthElapsedPct(Date.now()) / PCT_MAX;
+  return Math.round(spent * CENTS_PER_USD) / CENTS_PER_USD;
 }
 function renderPreviewSession() {
   seedSession();
-  const path = (0, import_node_path9.join)(exampleDir(), CURRENT_BRANCH);
+  const path = (0, import_node_path10.join)(exampleDir(), CURRENT_BRANCH);
   makeDirtyFolder(path);
+  const payg = loadConfig().statusline.mode === "payg";
   renderStatusline(
     JSON.stringify({
       session_id: SESSION,
@@ -1386,31 +1542,43 @@ function renderPreviewSession() {
       worktree: { path, name: CURRENT_BRANCH, branch: CURRENT_BRANCH },
       model: { display_name: MODEL_NAME },
       context_window: { used_percentage: CONTEXT_USED_PCT },
-      rate_limits: {
-        five_hour: { used_percentage: FIVE_HOUR_USED_PCT, resets_at: resetsAt(FIVE_HOUR_ELAPSED_PCT, FIVE_HOUR_WINDOW_S) },
-        seven_day: { used_percentage: SEVEN_DAY_USED_PCT, resets_at: resetsAt(SEVEN_DAY_ELAPSED_PCT, SEVEN_DAY_WINDOW_S) }
+      ...payg ? { cost: { total_cost_usd: evenPaceSpendUsd() } } : {
+        rate_limits: {
+          five_hour: { used_percentage: FIVE_HOUR_USED_PCT, resets_at: resetsAt(FIVE_HOUR_ELAPSED_PCT, FIVE_HOUR_WINDOW_S) },
+          seven_day: { used_percentage: SEVEN_DAY_USED_PCT, resets_at: resetsAt(SEVEN_DAY_ELAPSED_PCT, SEVEN_DAY_WINDOW_S) }
+        }
       }
     })
   );
 }
 function previewFields() {
   const cfg = loadConfig();
-  const home = (0, import_node_fs9.mkdtempSync)((0, import_node_path9.join)((0, import_node_os2.tmpdir)(), "tricorder-preview-"));
+  const home = (0, import_node_fs10.mkdtempSync)((0, import_node_path10.join)((0, import_node_os2.tmpdir)(), "tricorder-preview-"));
   try {
-    const dir = (0, import_node_path9.join)(home, ".claude", "tricorder");
-    (0, import_node_fs9.mkdirSync)(dir, { recursive: true });
-    const fields2 = { ...cfg.statusline.fields, intro: false };
-    (0, import_node_fs9.writeFileSync)((0, import_node_path9.join)(dir, "config.json"), serialize({ ...cfg, muted: true, statusline: { ...cfg.statusline, fields: fields2 } }));
+    const dir = (0, import_node_path10.join)(home, ".claude", "tricorder");
+    (0, import_node_fs10.mkdirSync)(dir, { recursive: true });
+    const type = resolveType(cfg.statusline.mode, detectAccount().type);
+    const applies = new Set(fieldsFor(type).map((f) => f.id));
+    const fields2 = Object.fromEntries(Object.entries(cfg.statusline.fields).map(([id, on]) => [id, on && applies.has(id)]));
+    const statusline = {
+      ...cfg.statusline,
+      fields: { ...fields2, intro: false },
+      mode: type === "unknown" ? "auto" : type,
+      budget: { monthlyUsd: EXAMPLE_BUDGET_USD }
+    };
+    (0, import_node_fs10.writeFileSync)((0, import_node_path10.join)(dir, "config.json"), serialize({ ...cfg, muted: true, statusline }));
     const drawn = (0, import_node_child_process4.execFileSync)(process.execPath, [process.argv[1] ?? "", "fields", "preview-render"], {
       env: { PATH: process.env.PATH ?? "", HOME: home, COLUMNS: PREVIEW_COLUMNS },
       encoding: "utf8",
       timeout: RENDER_TIMEOUT_MS
     });
     const intro = FIELDS.find((f) => f.id === "intro");
-    const note = cfg.statusline.fields.intro && intro ? [intro.sample + "   (crosses the line for the first seconds of a session)"] : [];
+    const introNote = cfg.statusline.fields.intro && intro ? [intro.sample + "   (crosses the line for the first seconds of a session)"] : [];
+    const spendNote = type === "payg" && fields2.spend ? [`\u{1F4B0} uses an example budget of $${EXAMPLE_BUDGET_USD}. Set yours with: tricorder budget <dollars>`] : [];
+    const note = [...introNote, ...spendNote];
     process.stdout.write([plainText(drawn).trimEnd(), ...note].join("\n") + "\n");
   } finally {
-    (0, import_node_fs9.rmSync)(home, { recursive: true, force: true });
+    (0, import_node_fs10.rmSync)(home, { recursive: true, force: true });
   }
 }
 
@@ -1526,6 +1694,7 @@ var COMMANDS = {
   mute: () => mute(process.argv[ARG_INDEX]),
   "worktree-click": () => worktreeClick(process.argv[ARG_INDEX]),
   detect: () => detect(),
+  budget: () => budget(process.argv[ARG_INDEX]),
   fields: () => fields(process.argv[ARG_INDEX], process.argv[ARG2_INDEX]),
   warp: () => warp(),
   logs: () => showLogs(process.argv[ARG_INDEX]),

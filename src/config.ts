@@ -13,6 +13,7 @@ export const DATA_DIR = join(homedir(), ".claude", "tricorder");
 export const CONFIG_PATH = join(DATA_DIR, "config.json");
 export const STATE_DIR = join(DATA_DIR, "state");
 export const SOUNDS_DIR = join(DATA_DIR, "sounds");
+export const SPEND_DIR = join(DATA_DIR, "spend");
 
 export const QUESTION_SOUND = join(SOUNDS_DIR, "please-specify.mp3");
 export const PERMISSION_SOUND = join(SOUNDS_DIR, "security-authorisation.mp3");
@@ -38,11 +39,18 @@ export function isWorktreeClickMode(value: unknown): value is WorktreeClickMode 
 
 // Which statusline fields are drawn (see src/fields.ts for the list), and how
 // the account type is decided.
+// Monthly budget for pay-per-use accounts, in US dollars (Claude Code reports cost
+// in USD). null = no budget set: only the month's spend is shown.
+export interface BudgetConfig {
+  readonly monthlyUsd: number | null;
+}
+
 export interface StatuslineConfig {
   readonly fields: Record<FieldId, boolean>;
   // "auto" detects the account type; the other two force it.
   readonly mode: AccountMode;
   readonly pace: PaceConfig;
+  readonly budget: BudgetConfig;
 }
 
 export interface Config {
@@ -57,7 +65,7 @@ export const DEFAULT_CONFIG: Config = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields(), mode: "auto", pace: DEFAULT_PACE },
+  statusline: { fields: defaultFields(), mode: "auto", pace: DEFAULT_PACE, budget: { monthlyUsd: null } },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -109,12 +117,17 @@ function mergePace(base: PaceConfig, given: unknown): PaceConfig {
   };
 }
 
+function mergeBudget(given: unknown): BudgetConfig {
+  const value = (given as Partial<Record<keyof BudgetConfig, unknown>> | undefined)?.monthlyUsd;
+  return { monthlyUsd: isPositive(value) ? value : null };
+}
+
 function mergeStatusline(base: StatuslineConfig, override: Partial<StatuslineConfig> | undefined): StatuslineConfig {
   const given = override?.fields as Partial<Record<string, unknown>> | undefined;
   const fields = Object.fromEntries(
     FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]] as const),
   ) as Record<FieldId, boolean>;
-  return { fields, mode: isAccountMode(override?.mode) ? override.mode : base.mode, pace: mergePace(base.pace, override?.pace) };
+  return { fields, mode: isAccountMode(override?.mode) ? override.mode : base.mode, pace: mergePace(base.pace, override?.pace), budget: mergeBudget(override?.budget) };
 }
 
 export function mergeConfig(base: Config, override: Partial<Config>): Config {

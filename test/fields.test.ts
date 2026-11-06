@@ -10,7 +10,7 @@ test("catalogue: ids are unique and every field is on by default", () => {
 });
 
 // The order the fields are drawn on line 1 of the statusline, left to right.
-const LINE_1_ORDER = ["muteIcon", "location", "dirty", "prs", "context", "model", "usage5h", "usage7d", "plan"];
+const LINE_1_ORDER = ["muteIcon", "location", "dirty", "prs", "context", "model", "usage5h", "usage7d", "spend", "plan"];
 
 test("catalogue: fields are listed in the order the statusline draws them", () => {
   assert.deepEqual(FIELD_IDS.slice(0, LINE_1_ORDER.length), LINE_1_ORDER);

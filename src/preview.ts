@@ -2,10 +2,12 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { detectAccount, resolveType } from "./account";
 import { loadConfig, serialize } from "./config";
 import { FIVE_HOUR_WINDOW_S, PCT_MAX, SEVEN_DAY_WINDOW_S } from "./pace";
-import { FIELDS } from "./fields";
+import { fieldsFor, FIELDS } from "./fields";
 import { addPR, addSubagent, addWorktree, setPlan } from "./state";
+import { monthElapsedPct } from "./spend";
 import { plainText, renderStatusline } from "./statusline";
 
 // `tricorder fields preview` shows what the statusline looks like with the
@@ -32,6 +34,10 @@ const FIVE_HOUR_USED_PCT = 37;
 const FIVE_HOUR_ELAPSED_PCT = 40;
 const SEVEN_DAY_USED_PCT = 12;
 const SEVEN_DAY_ELAPSED_PCT = 50;
+// Pay per use: an example budget, and a made-up spend that is exactly an even pace
+// through the month (so the animal is On track whatever the date).
+const EXAMPLE_BUDGET_USD = 200;
+const CENTS_PER_USD = 100;
 
 // When a window that is `elapsedPct` gone ends, in epoch seconds.
 function resetsAt(elapsedPct: number, windowS: number): number {
@@ -64,12 +70,21 @@ function seedSession(): void {
   setPlan(SESSION, join(exampleDir(), "plan.md"));
 }
 
+// What this month would have cost at an even pace through the budget, to the cent.
+function evenPaceSpendUsd(): number {
+  const spent = (EXAMPLE_BUDGET_USD * monthElapsedPct(Date.now())) / PCT_MAX;
+  return Math.round(spent * CENTS_PER_USD) / CENTS_PER_USD;
+}
+
 // Runs inside the throwaway home (see previewFields): seeds the session and
-// draws the statusline once.
+// draws the statusline once. The parent put the account type in the config's
+// `mode`: pay per use sends a cost and no usage limits, anything else sends the
+// usage limits and no cost, like Claude Code does.
 export function renderPreviewSession(): void {
   seedSession();
   const path = join(exampleDir(), CURRENT_BRANCH);
   makeDirtyFolder(path);
+  const payg = loadConfig().statusline.mode === "payg";
   renderStatusline(
     JSON.stringify({
       session_id: SESSION,
@@ -77,10 +92,14 @@ export function renderPreviewSession(): void {
       worktree: { path, name: CURRENT_BRANCH, branch: CURRENT_BRANCH },
       model: { display_name: MODEL_NAME },
       context_window: { used_percentage: CONTEXT_USED_PCT },
-      rate_limits: {
-        five_hour: { used_percentage: FIVE_HOUR_USED_PCT, resets_at: resetsAt(FIVE_HOUR_ELAPSED_PCT, FIVE_HOUR_WINDOW_S) },
-        seven_day: { used_percentage: SEVEN_DAY_USED_PCT, resets_at: resetsAt(SEVEN_DAY_ELAPSED_PCT, SEVEN_DAY_WINDOW_S) },
-      },
+      ...(payg
+        ? { cost: { total_cost_usd: evenPaceSpendUsd() } }
+        : {
+            rate_limits: {
+              five_hour: { used_percentage: FIVE_HOUR_USED_PCT, resets_at: resetsAt(FIVE_HOUR_ELAPSED_PCT, FIVE_HOUR_WINDOW_S) },
+              seven_day: { used_percentage: SEVEN_DAY_USED_PCT, resets_at: resetsAt(SEVEN_DAY_ELAPSED_PCT, SEVEN_DAY_WINDOW_S) },
+            },
+          }),
     }),
   );
 }
@@ -92,16 +111,27 @@ export function previewFields(): void {
     const dir = join(home, ".claude", "tricorder");
     mkdirSync(dir, { recursive: true });
     // Muted, so the mute icon can show. Animation off, because for the first
-    // seconds of a session it replaces the whole line.
-    const fields = { ...cfg.statusline.fields, intro: false };
-    writeFileSync(join(dir, "config.json"), serialize({ ...cfg, muted: true, statusline: { ...cfg.statusline, fields } }));
+    // seconds of a session it replaces the whole line. Fields that do not apply to
+    // this account type are off, as they are on the real statusline.
+    const type = resolveType(cfg.statusline.mode, detectAccount().type);
+    const applies = new Set<string>(fieldsFor(type).map((f) => f.id));
+    const fields = Object.fromEntries(Object.entries(cfg.statusline.fields).map(([id, on]) => [id, on && applies.has(id)]));
+    const statusline = {
+      ...cfg.statusline,
+      fields: { ...fields, intro: false },
+      mode: type === "unknown" ? "auto" : type,
+      budget: { monthlyUsd: EXAMPLE_BUDGET_USD },
+    };
+    writeFileSync(join(dir, "config.json"), serialize({ ...cfg, muted: true, statusline }));
     const drawn = execFileSync(process.execPath, [process.argv[1] ?? "", "fields", "preview-render"], {
       env: { PATH: process.env.PATH ?? "", HOME: home, COLUMNS: PREVIEW_COLUMNS },
       encoding: "utf8",
       timeout: RENDER_TIMEOUT_MS,
     });
     const intro = FIELDS.find((f) => f.id === "intro");
-    const note = cfg.statusline.fields.intro && intro ? [intro.sample + "   (crosses the line for the first seconds of a session)"] : [];
+    const introNote = cfg.statusline.fields.intro && intro ? [intro.sample + "   (crosses the line for the first seconds of a session)"] : [];
+    const spendNote = type === "payg" && fields.spend ? [`💰 uses an example budget of $${EXAMPLE_BUDGET_USD}. Set yours with: tricorder budget <dollars>`] : [];
+    const note = [...introNote, ...spendNote];
     process.stdout.write([plainText(drawn).trimEnd(), ...note].join("\n") + "\n");
   } finally {
     rmSync(home, { recursive: true, force: true });

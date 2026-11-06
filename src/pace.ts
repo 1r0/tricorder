@@ -63,6 +63,22 @@ export function bandForDeviation(deviationPts: number, marginPts: number): Exclu
   return "hot";
 }
 
+// The pace part shared by limits and budgets: no pace when the window is
+// unknown or already over, the sloth when it has only just started, otherwise
+// the deviation decides.
+function paceBand(usedPct: number, elapsed: number | null, cfg: PaceConfig): PaceBand | null {
+  if (elapsed === null || elapsed > PCT_MAX) return null;
+  if (elapsed < cfg.minElapsedPct) return "early";
+  return bandForDeviation(usedPct - elapsed, cfg.marginPts);
+}
+
+// The band for a monthly budget. Unlike a limit, a budget can be exceeded: Over
+// means more than 100% of it is spent. Spending exactly the budget is not Over.
+// Hand check: budget 200, spent 250 → 125% → Over; spent 200 → 100% → not Over.
+export function budgetBand(usedPct: number, elapsed: number | null, cfg: PaceConfig): PaceBand | null {
+  return usedPct > PCT_MAX ? "over" : paceBand(usedPct, elapsed, cfg);
+}
+
 // The band for a limit with a fixed allowance (5h, 7d). `elapsed` is the share
 // of the window gone, or null when unknown.
 // - Used up (100% or more): Over, whatever the time. You cannot use more.
@@ -70,8 +86,5 @@ export function bandForDeviation(deviationPts: number, marginPts: number): Exclu
 // - Less than `minElapsedPct` of the window gone: Just started (the sloth).
 // - Otherwise the pace decides.
 export function limitBand(usedPct: number, elapsed: number | null, cfg: PaceConfig): PaceBand | null {
-  if (usedPct >= PCT_MAX) return "over";
-  if (elapsed === null || elapsed > PCT_MAX) return null;
-  if (elapsed < cfg.minElapsedPct) return "early";
-  return bandForDeviation(usedPct - elapsed, cfg.marginPts);
+  return usedPct >= PCT_MAX ? "over" : paceBand(usedPct, elapsed, cfg);
 }

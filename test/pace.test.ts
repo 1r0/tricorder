@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bandForDeviation, DEFAULT_PACE, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S } from "../src/pace";
+import { bandForDeviation, budgetBand, DEFAULT_PACE, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S } from "../src/pace";
 
 const BAND = { early: "early", chill: "chill", onTrack: "onTrack", watchOut: "watchOut", hot: "hot", over: "over" } as const;
 const NOW_S = 1000;
@@ -89,4 +89,34 @@ test("every band has an animal, a colour and a name; the six animals differ", ()
   const styles = Object.values(PACE_STYLES);
   assert.equal(new Set(styles.map((s) => s.icon)).size, styles.length);
   assert.ok(styles.every((s) => !!s.name));
+});
+
+// Budget $200 on 16 Nov (50% of the month gone): spent → share of the budget → band.
+// Over is strictly above 100%: spending exactly the budget is Hot (+50), not Over.
+const BUDGET_USD = 200;
+const PCT_PER_USD = 100 / BUDGET_USD;
+const BUDGET_AT_HALF_MONTH = [
+  { spent: 100, band: BAND.onTrack }, // 50% → 0 points
+  { spent: 130, band: BAND.watchOut }, // 65% → +15
+  { spent: 160, band: BAND.hot }, // 80% → +30
+  { spent: 200, band: BAND.hot }, // 100% → +50, not Over
+  { spent: 250, band: BAND.over }, // 125%
+] as const;
+
+BUDGET_AT_HALF_MONTH.forEach((row) => {
+  test(`budget $200, half the month gone, $${row.spent} spent → ${row.band}`, () => {
+    assert.equal(budgetBand(row.spent * PCT_PER_USD, HALF_WINDOW, DEFAULT_PACE), row.band);
+  });
+});
+
+const EARLY_MONTH_PCT = 1.67; // about 12 hours into a 30-day month
+const BUDGET_EARLY = [
+  { spent: 20, band: BAND.early }, // 10%, too early to tell
+  { spent: 250, band: BAND.over }, // over beats the sloth
+] as const;
+
+BUDGET_EARLY.forEach((row) => {
+  test(`budget $200, 1.67% of the month gone, $${row.spent} spent → ${row.band}`, () => {
+    assert.equal(budgetBand(row.spent * PCT_PER_USD, EARLY_MONTH_PCT, DEFAULT_PACE), row.band);
+  });
 });

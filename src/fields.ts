@@ -36,15 +36,20 @@ export interface FieldInfo {
 
 const EVERY_ACCOUNT: readonly AccountType[] = [SUBSCRIPTION, PAYG];
 const SUBSCRIPTION_ONLY: readonly AccountType[] = [SUBSCRIPTION];
+const PAYG_ONLY: readonly AccountType[] = [PAYG];
 
 // Shared by the usage fields: what the animal and the colour of the percentage mean.
 const PACE_LEGEND =
   "The animal and the colour compare your use with the time gone in the window: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = limit reached. In the first 3% of a window it is too early to tell, so a 🦥 sloth (grey) shows instead. (Margin and 3% are settings: statusline.pace.)";
 
+// What the spend field shows and means, for accounts that pay per use.
+const SPEND_LEGEND =
+  "💰 = spend this month, in US dollars (calendar month, UTC). With a budget the animal and the colour compare the share of the budget spent with the share of the month gone: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = over budget (more than 100% spent), 🦥 grey = the first 3% of the month, too early to tell. The budget is not a limit. The figure is an estimate kept by tricorder: it misses sessions without a statusline, other machines and other tools using the same key.";
+
 // Order here is the order the fields appear on the statusline, left to right,
 // then top to bottom (line 1: mute icon, location with its uncommitted-changes
 // mark and PR tags, context,
-// model, 5-hour and 7-day usage, plan link at the right edge; then the other-worktrees line, then the
+// model, 5-hour and 7-day usage or monthly spend, plan link at the right edge; then the other-worktrees line, then the
 // sub-agents line). The start-up animation comes last: it only shows for the
 // first seconds. Setup lists the fields in this same order.
 export const FIELDS = [
@@ -126,6 +131,16 @@ export const FIELDS = [
     sample: "7d 🐢 12%",
     legend: PACE_LEGEND,
     appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true,
+  },
+  {
+    id: "spend",
+    name: "Monthly spend",
+    line: "main",
+    shows: "What you have spent this month on Claude usage (an estimate), and, if you set a monthly budget, how that compares with an even spread of the budget over the month.",
+    sample: "💰 $62/$200 🐕 31%   (no budget set: 💰 $62)",
+    legend: SPEND_LEGEND,
+    appliesTo: PAYG_ONLY,
     defaultOn: true,
   },
   {

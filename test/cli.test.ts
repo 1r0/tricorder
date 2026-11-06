@@ -7,11 +7,13 @@ import { plain, readConfig, run, sandbox, writeConfig } from "./helpers";
 
 const CONTEXT_USED_PCT = 42; // hand check: 42% used shows as "🔋 42%"
 const ACCOUNT_SUBSCRIPTION = "subscription";
+const ACCOUNT_FILE = ".claude.json";
+const PLAN_PRO = "claude_pro";
 const ACCOUNT_DIR_PREFIX = "tricorder-acct-";
 // Hand count for a subscription: 12 fields + "Enable all" = 13 options → 4, 4, 4, 1 → the single one borrows: 4, 4, 3, 2.
-// Pay per use has no 5h/7d fields: 10 + 1 = 11 options → 4, 4, 3.
+// Pay per use has no 5h/7d fields but has spend: 11 fields + 1 = 12 options → 4, 4, 4.
 const SUBSCRIPTION = { fields: 12, optionCounts: [4, 4, 3, 2] } as const;
-const PAYG = { optionCounts: [4, 4, 3] } as const;
+const PAYG = { optionCounts: [4, 4, 4] } as const;
 const DESCRIBE = "describe";
 const QUESTIONS = "questions";
 
@@ -86,17 +88,17 @@ test("fields set: an empty list changes nothing", () => {
 test("detect: reads the account file of CLAUDE_CONFIG_DIR", () => {
   const box = sandbox();
   const dir = mkdtempSync(join(tmpdir(), ACCOUNT_DIR_PREFIX));
-  writeFileSync(join(dir, ".claude.json"), JSON.stringify({ oauthAccount: { organizationType: "claude_pro", hasExtraUsageEnabled: true } }));
+  writeFileSync(join(dir, ACCOUNT_FILE), JSON.stringify({ oauthAccount: { organizationType: PLAN_PRO, hasExtraUsageEnabled: true } }));
   const out = JSON.parse(run(box, ["detect"], { configDir: dir }).stdout);
   assert.equal(out.type, ACCOUNT_SUBSCRIPTION);
-  assert.equal(out.plan, "claude_pro");
+  assert.equal(out.plan, PLAN_PRO);
   assert.equal(out.extraUsage, true);
 });
 
 test("detect: a config folder with no account entry is pay per use; a missing file is unknown", () => {
   const box = sandbox();
   const withFile = mkdtempSync(join(tmpdir(), ACCOUNT_DIR_PREFIX));
-  writeFileSync(join(withFile, ".claude.json"), "{}");
+  writeFileSync(join(withFile, ACCOUNT_FILE), "{}");
   assert.equal(JSON.parse(run(box, ["detect"], { configDir: withFile }).stdout).type, "payg");
   const empty = mkdtempSync(join(tmpdir(), ACCOUNT_DIR_PREFIX));
   assert.equal(JSON.parse(run(box, ["detect"], { configDir: empty }).stdout).type, "unknown");
@@ -176,4 +178,35 @@ test("pay-per-use accounts are not offered the 5h/7d fields", () => {
   assert.deepEqual(asked.calls[0].map((q: { options: unknown[] }) => q.options.length), PAYG.optionCounts);
   const sub = JSON.parse(run(box, ["fields", DESCRIBE, ACCOUNT_SUBSCRIPTION]).stdout);
   assert.ok(sub.fields.some((f: { id: string }) => f.id === "usage5h"));
+});
+
+// An account file with no signed-in account means pay per use; with one, a subscription.
+function accountDir(contents: unknown): string {
+  const dir = mkdtempSync(join(tmpdir(), ACCOUNT_DIR_PREFIX));
+  writeFileSync(join(dir, ACCOUNT_FILE), JSON.stringify(contents));
+  return dir;
+}
+const PAYG_ACCOUNT = {};
+const SUBSCRIPTION_ACCOUNT = { oauthAccount: { organizationType: PLAN_PRO } };
+const EXAMPLE_BUDGET = "/$200";
+
+test("fields preview on a pay-per-use account shows spend with an example budget, and no usage limits", () => {
+  const out = run(sandbox(), ["fields", "preview"], { configDir: accountDir(PAYG_ACCOUNT) }).stdout;
+  assert.ok(out.includes("💰 $"));
+  assert.ok(out.includes(EXAMPLE_BUDGET));
+  assert.ok(out.includes("example budget of $200"));
+  assert.ok(!out.includes("5h") && !out.includes("7d"));
+});
+
+test("fields preview on a subscription shows the usage limits and no spend", () => {
+  const out = run(sandbox(), ["fields", "preview"], { configDir: accountDir(SUBSCRIPTION_ACCOUNT) }).stdout;
+  assert.ok(out.includes("5h 🐕 37%") && out.includes("7d 🐢 12%"));
+  assert.ok(!out.includes("💰"));
+});
+
+test("spend is offered to pay-per-use accounts only", () => {
+  const box = sandbox();
+  const ids = (type: string): string[] => JSON.parse(run(box, ["fields", DESCRIBE, type]).stdout).fields.map((f: { id: string }) => f.id);
+  assert.ok(ids("payg").includes("spend"));
+  assert.ok(!ids(ACCOUNT_SUBSCRIPTION).includes("spend"));
 });
