@@ -157,7 +157,7 @@ On a subscription account (Pro, Max, ...) Claude Code reports how much of your 5
 
 Example: 5 hours is the window and 2.5 hours have passed (50%). With 55% used you are +5, 🐕 on track; with 65% used +15, 🐎; with 75% used +25, 🦅. With 30% used you are −20, 🐢.
 
-Below 3% of the window gone the pace is too noisy to mean anything, so a 🦥 sloth shows instead of a pace animal (the percent is grey). If Claude Code sends no reset time, only the percent shows. Both numbers are settings: `statusline.pace.marginPts` (default 10, from the default of Claude's Pacing Sensitivity screen) and `statusline.pace.minElapsedPct` (default 3). Pay-per-use accounts send no limits, so these fields are not offered to them.
+Below 3% of the window gone the pace is too noisy to mean anything, so a 🦥 sloth shows instead of a pace animal (the percent is grey). If Claude Code sends no reset time, only the percent shows. Both numbers are settings: `statusline.pace.marginPts` (default 10) and `statusline.pace.minElapsedPct` (default 3). Pay-per-use accounts send no limits, so these fields are not offered to them.
 
 ### Choosing which statusline fields to show
 

@@ -15,10 +15,10 @@ export interface PaceStyle {
   readonly icon: string;
 }
 
-// Names and colours follow the bands of Claude's own Pacing Sensitivity screen
-// (Chill, On track, Watch out, Hot). "Over" is added for a limit that is used up
-// (or, for spend, a budget that is exceeded), and "Just started" (the sloth) for
-// the first moments of a window, when a pace would mean nothing.
+// Four bands for the pace itself (Chill, On track, Watch out, Hot). "Over" is for a
+// limit that is used up (or, for spend, a budget that is exceeded), and "Just
+// started" (the sloth) is for the first moments of a window, when a pace would
+// mean nothing.
 export const PACE_STYLES = {
   early: { name: "Just started", color: 90, icon: "🦥" }, // grey: too early in the window to tell
   chill: { name: "Chill", color: 32, icon: "🐢" }, // green
@@ -30,7 +30,7 @@ export const PACE_STYLES = {
 
 export interface PaceConfig {
   // Width of the "On track" band, in percentage points either side of even pace.
-  // Default 10: the default of Claude's Pacing Sensitivity screen.
+  // Default 10: a starting value that can be changed in the config.
   readonly marginPts: number;
   // Below this share of the window gone, the pace is too noisy to mean anything:
   // the sloth shows instead of a pace animal.
