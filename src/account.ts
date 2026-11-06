@@ -50,14 +50,35 @@ export function accountFilePath(): string | null {
   return home === undefined || home === "" ? null : join(home, ".claude.json");
 }
 
-export function detectAccount(): Detection {
-  const file = accountFilePath();
-  if (file === null) return UNKNOWN_ACCOUNT;
-  try {
-    return classify(JSON.parse(readFileSync(file, "utf8")));
-  } catch {
-    return UNKNOWN_ACCOUNT;
+// The parsed account file, read at most once per run (a statusline redraw needs
+// both the account type and the email). null = missing or unreadable.
+let accountFile: { readonly parsed: unknown } | undefined;
+function readAccountFile(): unknown {
+  if (accountFile === undefined) {
+    const file = accountFilePath();
+    try {
+      accountFile = { parsed: file === null ? null : JSON.parse(readFileSync(file, "utf8")) };
+    } catch {
+      accountFile = { parsed: null };
+    }
   }
+  return accountFile.parsed;
+}
+
+export function detectAccount(): Detection {
+  return classify(readAccountFile());
+}
+
+// Pure: the sign-in email in the parsed .claude.json (`oauthAccount.emailAddress`),
+// or null when there is none. Pay-per-use logins have no account entry, so no email.
+export function emailOf(parsed: unknown): string | null {
+  const oauth = (parsed as { oauthAccount?: { emailAddress?: unknown } } | null)?.oauthAccount;
+  const email = oauth?.emailAddress;
+  return typeof email === "string" && email !== "" ? email : null;
+}
+
+export function readAccountEmail(): string | null {
+  return emailOf(readAccountFile());
 }
 
 // The config can force the type; "auto" uses what was detected.

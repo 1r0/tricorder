@@ -11,7 +11,7 @@ import {
   setLabel,
   setModel,
 } from "./state";
-import { detectAccount, resolveType } from "./account";
+import { detectAccount, readAccountEmail, resolveType } from "./account";
 import { currentBranch, isDirty } from "./git";
 import { budgetBand, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, type PaceConfig } from "./pace";
 import { monthElapsedPct, monthSpendUsd, recordCost } from "./spend";
@@ -137,6 +137,11 @@ const ICON_ROBOT = "🤖";
 const ICON_MONEY = "💰";
 const SEP = " · ";
 const MARGIN = 1;
+// Columns kept empty at the right edge when the account email is shown: the terminal
+// and Claude Code's own padding can clip the last few characters of a right-aligned
+// label, which cut off the email in practice.
+const RIGHT_MARGIN = 6;
+const RIGHT_SEP = "  ";
 const MINI_SHIP = "o≡≡≡>";
 const ANIM_MS = 4000;
 const DEFAULT_WIDTH = 80;
@@ -308,10 +313,15 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
   const showMute = cfg.muted && on.muteIcon;
   const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
   const plan = session === "" || !on.plan ? null : getPlan(session);
-  if (plan === null) return left;
-  const right = openLink(plan, ICON_MAP + " " + sgr(DIM, "plan"));
+  const email = on.account ? readAccountEmail() : null;
+  const rightParts = [plan === null ? null : openLink(plan, ICON_MAP + " " + sgr(DIM, "plan")), email === null ? null : sgr(DIM, email)].filter(
+    (s): s is string => s !== null,
+  );
+  if (!rightParts.length) return left;
+  const right = rightParts.join(RIGHT_SEP);
   const width = terminalWidth();
-  const gap = width > 0 ? Math.max(MARGIN, width - visWidth(left) - visWidth(right) - MARGIN) : MARGIN;
+  const edge = email === null ? MARGIN : RIGHT_MARGIN;
+  const gap = width > 0 ? Math.max(MARGIN, width - visWidth(left) - visWidth(right) - edge) : MARGIN;
   return left + " ".repeat(gap) + right;
 }
 

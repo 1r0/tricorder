@@ -18,6 +18,7 @@ The statusline shows, on multiple lines and only when there's something to show:
 - **Context gauge** — percent only, colored green/yellow/red (green below 70%, yellow from 70%, red from 90%). It reports the truth; it cannot force a compact (the harness owns that).
 - **Model** — the current session model.
 - **5-hour and 7-day usage** (subscription accounts) — `5h 🐕 37% · 7d 🐢 12%`: the share of each usage limit used, with an animal for the pace (used % minus the % of the window gone): 🐢 Chill (green, more than `marginPts` under), 🐕 On track (blue, within `marginPts`), 🐎 Watch out (orange, up to twice `marginPts` over), 🦅 Hot (red, beyond that), 🐉 Over (magenta, limit used up). Below `minElapsedPct` of the window gone a 🦥 sloth (grey) shows instead, because the pace would mean nothing yet; without a reset time only the percent shows. `marginPts` (default 10) and `minElapsedPct` (default 3) are in the `statusline.pace` config block; see the main README for the worked numbers. Pay-per-use accounts send no limits and are not offered these fields.
+- **Account email** (subscription accounts) — the sign-in email in grey at the right edge of line 1, after the plan link, so you can tell a personal and a work account apart. Read from `$CLAUDE_CONFIG_DIR/.claude.json` (else `~/.claude.json`); shown nothing if it cannot be found. 6 columns are kept free at the right edge while it shows. It also shows in screenshots: switch the `account` field off if that matters.
 - **Monthly spend** (pay-per-use accounts) — `💰 $62/$200 🐕 31%`: this month's estimated spend in US dollars (calendar month, UTC), the budget set with `tricorder budget` (`statusline.budget.monthlyUsd`, not a limit), the pace animal (share of budget spent minus share of the month gone, same bands as above) and the share spent. 🐉 Over means more than 100% of the budget. With no budget: `💰 $62`. Claude Code reports only each session's own cost, so tricorder keeps a running total per session in `~/.claude/tricorder/spend/`; it is an estimate and misses sessions without a statusline, other machines and other tools on the same key. Subscription accounts do not show it.
 - **PRs** — every PR created this session, each an `https` link.
 - **Sub-agents** — one line per running sub-agent: type and model, comma-separated. The model is exact when the spawn set an override, or inherited from the session once the statusline has rendered at least once (no Claude Code hook payload carries the session's model name, only the statusline's does); until then it shows `default`. This only affects the statusline's own display — the menu-bar app never shows model, so it's unaffected either way.
@@ -83,7 +84,7 @@ Effective config lives at `~/.claude/tricorder/config.json`, seeded on first run
   "statusline": {
     "mode": "auto",
     "fields": { "muteIcon": true, "location": true, "dirty": true, "prs": true, "context": true, "model": true,
-                "usage5h": true, "usage7d": true, "spend": true, "plan": true, "worktrees": true, "subagents": true, "intro": true },
+                "usage5h": true, "usage7d": true, "spend": true, "plan": true, "account": true, "worktrees": true, "subagents": true, "intro": true },
     "pace": { "marginPts": 10, "minElapsedPct": 3 },
     "budget": { "monthlyUsd": null }
   },

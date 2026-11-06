@@ -32,11 +32,12 @@ export interface RunResult {
   readonly status: number | null;
 }
 
-export function run(box: Sandbox, args: readonly string[], opts: { stdin?: string; configDir?: string } = {}): RunResult {
+export function run(box: Sandbox, args: readonly string[], opts: { stdin?: string; configDir?: string; columns?: number } = {}): RunResult {
   const env = {
     PATH: process.env.PATH ?? "",
     HOME: box.home,
     ...(opts.configDir === undefined ? {} : { CLAUDE_CONFIG_DIR: opts.configDir }),
+    ...(opts.columns === undefined ? {} : { COLUMNS: String(opts.columns) }),
   };
   const r = spawnSync("node", [CLI, ...args], { env, input: opts.stdin ?? "", encoding: "utf8" });
   return { stdout: r.stdout, stderr: r.stderr, status: r.status };

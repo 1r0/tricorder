@@ -134,6 +134,16 @@ var FIELDS = [
     defaultOn: true
   },
   {
+    id: "account",
+    name: "Account email",
+    line: "main",
+    shows: "The email you are signed in with, at the right edge of the first line, so you can tell your accounts apart. It also shows in screenshots and screen shares: switch it off if that matters.",
+    sample: "you@example.com",
+    legend: "Grey text. Read from Claude Code's own account file; nothing is shown if it cannot be found.",
+    appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true
+  },
+  {
     id: "worktrees",
     name: "Other worktrees",
     line: "worktrees",
@@ -519,14 +529,28 @@ function accountFilePath() {
   const home = process.env.HOME;
   return home === void 0 || home === "" ? null : (0, import_node_path3.join)(home, ".claude.json");
 }
-function detectAccount() {
-  const file = accountFilePath();
-  if (file === null) return UNKNOWN_ACCOUNT;
-  try {
-    return classify(JSON.parse((0, import_node_fs4.readFileSync)(file, "utf8")));
-  } catch {
-    return UNKNOWN_ACCOUNT;
+var accountFile;
+function readAccountFile() {
+  if (accountFile === void 0) {
+    const file = accountFilePath();
+    try {
+      accountFile = { parsed: file === null ? null : JSON.parse((0, import_node_fs4.readFileSync)(file, "utf8")) };
+    } catch {
+      accountFile = { parsed: null };
+    }
   }
+  return accountFile.parsed;
+}
+function detectAccount() {
+  return classify(readAccountFile());
+}
+function emailOf(parsed) {
+  const oauth = parsed?.oauthAccount;
+  const email = oauth?.emailAddress;
+  return typeof email === "string" && email !== "" ? email : null;
+}
+function readAccountEmail() {
+  return emailOf(readAccountFile());
 }
 function resolveType(mode, detected) {
   return mode === "auto" ? detected : mode;
@@ -706,6 +730,8 @@ var ICON_ROBOT = "\u{1F916}";
 var ICON_MONEY = "\u{1F4B0}";
 var SEP = " \xB7 ";
 var MARGIN = 1;
+var RIGHT_MARGIN = 6;
+var RIGHT_SEP = "  ";
 var MINI_SHIP = "o\u2261\u2261\u2261>";
 var ANIM_MS = 4e3;
 var DEFAULT_WIDTH = 80;
@@ -816,10 +842,15 @@ function line1(p, session, loc, cfg) {
   const showMute = cfg.muted && on.muteIcon;
   const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
   const plan = session === "" || !on.plan ? null : getPlan(session);
-  if (plan === null) return left;
-  const right = openLink(plan, ICON_MAP + " " + sgr(DIM, "plan"));
+  const email = on.account ? readAccountEmail() : null;
+  const rightParts = [plan === null ? null : openLink(plan, ICON_MAP + " " + sgr(DIM, "plan")), email === null ? null : sgr(DIM, email)].filter(
+    (s) => s !== null
+  );
+  if (!rightParts.length) return left;
+  const right = rightParts.join(RIGHT_SEP);
   const width = terminalWidth();
-  const gap = width > 0 ? Math.max(MARGIN, width - visWidth(left) - visWidth(right) - MARGIN) : MARGIN;
+  const edge = email === null ? MARGIN : RIGHT_MARGIN;
+  const gap = width > 0 ? Math.max(MARGIN, width - visWidth(left) - visWidth(right) - edge) : MARGIN;
   return left + " ".repeat(gap) + right;
 }
 function worktreeLine(session, loc, cfg) {
@@ -1497,7 +1528,7 @@ var CURRENT_PR_NUMBER = 12;
 var OTHER_PR_NUMBER = 13;
 var CONTEXT_USED_PCT = 42;
 var MODEL_NAME = "Opus 5.5";
-var PREVIEW_COLUMNS = "90";
+var PREVIEW_COLUMNS = "100";
 var RENDER_TIMEOUT_MS = 1e4;
 var MS_PER_S2 = 1e3;
 var FIVE_HOUR_USED_PCT = 37;
@@ -1505,6 +1536,7 @@ var FIVE_HOUR_ELAPSED_PCT = 40;
 var SEVEN_DAY_USED_PCT = 12;
 var SEVEN_DAY_ELAPSED_PCT = 50;
 var EXAMPLE_BUDGET_USD = 200;
+var EXAMPLE_EMAIL = "you@example.com";
 var CENTS_PER_USD = 100;
 function resetsAt(elapsedPct2, windowS) {
   return Date.now() / MS_PER_S2 + (1 - elapsedPct2 / PCT_MAX) * windowS;
@@ -1566,6 +1598,7 @@ function previewFields() {
       mode: type === "unknown" ? "auto" : type,
       budget: { monthlyUsd: EXAMPLE_BUDGET_USD }
     };
+    (0, import_node_fs10.writeFileSync)((0, import_node_path10.join)(home, ".claude.json"), JSON.stringify({ oauthAccount: { emailAddress: EXAMPLE_EMAIL } }));
     (0, import_node_fs10.writeFileSync)((0, import_node_path10.join)(dir, "config.json"), serialize({ ...cfg, muted: true, statusline }));
     const drawn = (0, import_node_child_process4.execFileSync)(process.execPath, [process.argv[1] ?? "", "fields", "preview-render"], {
       env: { PATH: process.env.PATH ?? "", HOME: home, COLUMNS: PREVIEW_COLUMNS },

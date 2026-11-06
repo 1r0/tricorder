@@ -25,7 +25,7 @@ const CURRENT_PR_NUMBER = 12;
 const OTHER_PR_NUMBER = 13;
 const CONTEXT_USED_PCT = 42;
 const MODEL_NAME = "Opus 5.5";
-const PREVIEW_COLUMNS = "90"; // width the plan link is pushed to the right edge of
+const PREVIEW_COLUMNS = "100"; // width the plan link is pushed to the right edge of
 const RENDER_TIMEOUT_MS = 10_000;
 const MS_PER_S = 1000;
 // Made-up usage so both limits show a pace: 5h is 40% gone with 37% used (3 points
@@ -37,6 +37,7 @@ const SEVEN_DAY_ELAPSED_PCT = 50;
 // Pay per use: an example budget, and a made-up spend that is exactly an even pace
 // through the month (so the animal is On track whatever the date).
 const EXAMPLE_BUDGET_USD = 200;
+const EXAMPLE_EMAIL = "you@example.com"; // a reserved example address, never a real one
 const CENTS_PER_USD = 100;
 
 // When a window that is `elapsedPct` gone ends, in epoch seconds.
@@ -122,6 +123,7 @@ export function previewFields(): void {
       mode: type === "unknown" ? "auto" : type,
       budget: { monthlyUsd: EXAMPLE_BUDGET_USD },
     };
+    writeFileSync(join(home, ".claude.json"), JSON.stringify({ oauthAccount: { emailAddress: EXAMPLE_EMAIL } }));
     writeFileSync(join(dir, "config.json"), serialize({ ...cfg, muted: true, statusline }));
     const drawn = execFileSync(process.execPath, [process.argv[1] ?? "", "fields", "preview-render"], {
       env: { PATH: process.env.PATH ?? "", HOME: home, COLUMNS: PREVIEW_COLUMNS },

@@ -49,7 +49,8 @@ const SPEND_LEGEND =
 // Order here is the order the fields appear on the statusline, left to right,
 // then top to bottom (line 1: mute icon, location with its uncommitted-changes
 // mark and PR tags, context,
-// model, 5-hour and 7-day usage or monthly spend, plan link at the right edge; then the other-worktrees line, then the
+// model, 5-hour and 7-day usage or monthly spend, plan link and account email
+// at the right edge; then the other-worktrees line, then the
 // sub-agents line). The start-up animation comes last: it only shows for the
 // first seconds. Setup lists the fields in this same order.
 export const FIELDS = [
@@ -151,6 +152,16 @@ export const FIELDS = [
     sample: "🗺️ plan",
     legend: "🗺️ = plan file. Grey text.",
     appliesTo: EVERY_ACCOUNT,
+    defaultOn: true,
+  },
+  {
+    id: "account",
+    name: "Account email",
+    line: "main",
+    shows: "The email you are signed in with, at the right edge of the first line, so you can tell your accounts apart. It also shows in screenshots and screen shares: switch it off if that matters.",
+    sample: "you@example.com",
+    legend: "Grey text. Read from Claude Code's own account file; nothing is shown if it cannot be found.",
+    appliesTo: SUBSCRIPTION_ONLY,
     defaultOn: true,
   },
   {
