@@ -6,6 +6,8 @@ import { plain, run, sandbox, writeConfig } from "./helpers";
 
 // Only the usage fields are on, so the output is just "5h … · 7d …".
 const MS_PER_S = 1000;
+const FIVE_HOUR = "five_hour"; // names of the limits in the payload
+const SEVEN_DAY = "seven_day";
 const ONLY_USAGE = Object.fromEntries(FIELD_IDS.map((id) => [id, id === "usage5h" || id === "usage7d"]));
 const HALF = 50; // half of the window gone
 const USED = { onTrack: 55, watchOut: 65, hot: 75, chill: 30, over: 100, early: 5, noReset: 40 } as const;
@@ -22,9 +24,11 @@ function limit(used: number, elapsed: number, windowS: number) {
   return { used_percentage: used, resets_at: Date.now() / MS_PER_S + (1 - elapsed / PCT_MAX) * windowS };
 }
 
-function statusline(payload: unknown, fields: Record<string, boolean> = ONLY_USAGE) {
+// The earlier tests are about the animals, so they run with the reset note off.
+// `resetNoteFrom` null means "not in the config at all", which is the real default.
+function statusline(payload: unknown, fields: Record<string, boolean> = ONLY_USAGE, resetNoteFrom: string | null = "off") {
   const box = sandbox();
-  writeConfig(box, { statusline: { fields } });
+  writeConfig(box, { statusline: { fields, ...(resetNoteFrom === null ? {} : { pace: { resetNoteFrom } }) } });
   const raw = run(box, ["statusline"], { stdin: JSON.stringify(payload) }).stdout;
   return { raw, text: plain(raw).trim() };
 }
@@ -83,4 +87,42 @@ test("switching 5h off leaves only 7d", () => {
   const fields = { ...ONLY_USAGE, usage5h: false };
   const out = statusline({ rate_limits: { five_hour: limit(USED.onTrack, HALF, FIVE_HOUR_WINDOW_S), seven_day: limit(USED.onTrack, HALF, SEVEN_DAY_WINDOW_S) } }, fields);
   assert.equal(out.text, "7d 🐕 55%");
+});
+
+// ---- the reset note: "(reset in 42m)" after the percent, in the same colour
+
+const NOTE_USED = { hot: 70, hot7d: 60, over: 100, watchOut: 65, onTrack: 55 } as const;
+const GONE = { hot5h: 40, hot7d: 20, over: 86, half: 50 } as const;
+
+// Hand check. 5h = 18000 s. 40% gone leaves 10800 s = 180 min = 3h. 86% gone leaves 2520 s = 42 min.
+// 50% gone leaves 9000 s = 150 min = 2h 30m. 7d = 604800 s. 20% gone leaves 483840 s = 8064 min = 5d 14h.
+const NOTES = [
+  { label: "Hot 5h", setting: null, used: NOTE_USED.hot, gone: GONE.hot5h, win: FIVE_HOUR, text: "5h 🦅 70% (reset in 3h)", colour: COLOUR_RED },
+  { label: "Hot 7d", setting: null, used: NOTE_USED.hot7d, gone: GONE.hot7d, win: SEVEN_DAY, text: "7d 🦅 60% (reset in 5d 14h)", colour: COLOUR_RED },
+  { label: "used-up 5h", setting: null, used: NOTE_USED.over, gone: GONE.over, win: FIVE_HOUR, text: "5h 🐉 100% (reset in 42m)", colour: COLOUR_MAGENTA },
+  { label: "Watch out with the default (hot)", setting: null, used: NOTE_USED.watchOut, gone: GONE.half, win: FIVE_HOUR, text: "5h 🐎 65%", colour: COLOUR_ORANGE },
+  { label: "Watch out with watchOut", setting: "watchOut", used: NOTE_USED.watchOut, gone: GONE.half, win: FIVE_HOUR, text: "5h 🐎 65% (reset in 2h 30m)", colour: COLOUR_ORANGE },
+  { label: "On track with watchOut", setting: "watchOut", used: NOTE_USED.onTrack, gone: GONE.half, win: FIVE_HOUR, text: "5h 🐕 55%", colour: COLOUR_BLUE },
+  { label: "On track with always", setting: "always", used: NOTE_USED.onTrack, gone: GONE.half, win: FIVE_HOUR, text: "5h 🐕 55% (reset in 2h 30m)", colour: COLOUR_BLUE },
+  { label: "Hot with off", setting: "off", used: NOTE_USED.hot, gone: GONE.hot5h, win: FIVE_HOUR, text: "5h 🦅 70%", colour: COLOUR_RED },
+] as const;
+
+NOTES.forEach((n) => {
+  test(`reset note: ${n.label} → "${n.text}"`, () => {
+    const windowS = n.win === FIVE_HOUR ? FIVE_HOUR_WINDOW_S : SEVEN_DAY_WINDOW_S;
+    const out = statusline({ rate_limits: { [n.win]: limit(n.used, n.gone, windowS) } }, ONLY_USAGE, n.setting);
+    assert.equal(out.text, n.text);
+    const note = n.text.slice(n.text.indexOf("(")).trim();
+    if (n.text.includes("(")) assert.ok(out.raw.includes(`${n.colour}${note}`), "the note has the colour of the band");
+  });
+});
+
+test("reset note: no reset time, no note, even with 'always'", () => {
+  const out = statusline({ rate_limits: { five_hour: { used_percentage: USED.hot } } }, ONLY_USAGE, "always");
+  assert.equal(out.text, "5h 75%");
+});
+
+test("reset note: both limits can carry one on the same line", () => {
+  const limits = { five_hour: limit(NOTE_USED.hot, GONE.hot5h, FIVE_HOUR_WINDOW_S), seven_day: limit(NOTE_USED.hot7d, GONE.hot7d, SEVEN_DAY_WINDOW_S) };
+  assert.equal(statusline({ rate_limits: limits }, ONLY_USAGE, null).text, "5h 🦅 70% (reset in 3h) · 7d 🦅 60% (reset in 5d 14h)");
 });

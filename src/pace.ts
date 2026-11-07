@@ -28,6 +28,19 @@ export const PACE_STYLES = {
   over: { name: "Over", color: 95, icon: "🐉" }, // magenta
 } as const satisfies Record<PaceBand, PaceStyle>;
 
+// When "(reset in 42m)" follows a limit's percent:
+// - "off": never.
+// - "hot" (default): when the pace is Hot, or the limit is used up (Over).
+// - "watchOut": from Watch out upward.
+// - "always": whenever the reset time is known.
+const WATCH_OUT = "watchOut"; // the band name, also a setting value
+export const RESET_NOTE_FROM = ["off", WATCH_OUT, "hot", "always"] as const;
+export type ResetNoteFrom = (typeof RESET_NOTE_FROM)[number];
+
+export function isResetNoteFrom(value: unknown): value is ResetNoteFrom {
+  return (RESET_NOTE_FROM as readonly unknown[]).includes(value);
+}
+
 export interface PaceConfig {
   // Width of the "On track" band, in percentage points either side of even pace.
   // Default 10: a starting value that can be changed in the config.
@@ -35,9 +48,11 @@ export interface PaceConfig {
   // Below this share of the window gone, the pace is too noisy to mean anything:
   // the sloth shows instead of a pace animal.
   readonly minElapsedPct: number;
+  // From which band the time until the limit resets is shown.
+  readonly resetNoteFrom: ResetNoteFrom;
 }
 
-export const DEFAULT_PACE = { marginPts: 10, minElapsedPct: 3 } as const satisfies PaceConfig;
+export const DEFAULT_PACE = { marginPts: 10, minElapsedPct: 3, resetNoteFrom: "hot" } as const satisfies PaceConfig;
 
 // Window lengths of the limits Claude Code reports in `rate_limits`.
 export const FIVE_HOUR_WINDOW_S = 18_000; // 5 hours
@@ -87,4 +102,36 @@ export function budgetBand(usedPct: number, elapsed: number | null, cfg: PaceCon
 // - Otherwise the pace decides.
 export function limitBand(usedPct: number, elapsed: number | null, cfg: PaceConfig): PaceBand | null {
   return usedPct >= PCT_MAX ? "over" : paceBand(usedPct, elapsed, cfg);
+}
+
+// The bands that show the reset note for the two ranked settings.
+const NOTE_BANDS = {
+  watchOut: [WATCH_OUT, "hot", "over"],
+  hot: ["hot", "over"],
+} as const satisfies Record<Exclude<ResetNoteFrom, "off" | "always">, readonly PaceBand[]>;
+
+// Should the reset note show for this band? `band` is null when there is no pace.
+export function showsResetNote(band: PaceBand | null, from: ResetNoteFrom): boolean {
+  if (from === "off") return false;
+  if (from === "always") return true;
+  return band !== null && (NOTE_BANDS[from] as readonly PaceBand[]).includes(band);
+}
+
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const MINUTES_PER_DAY = 1440;
+
+// "3h 32m" or "3h": a larger unit and the smaller one after it, without a zero part.
+const twoUnits = (big: number, bigUnit: string, small: number, smallUnit: string): string =>
+  small ? `${big}${bigUnit} ${small}${smallUnit}` : `${big}${bigUnit}`;
+
+// Time left, short: under an hour "42m", under a day "3h 32m", longer "5d 4h".
+// Rounded up to the next minute, so it never shows "0m". Hand check:
+// 2520 s → 42m · 3540 s → 59m · 3600 s → 1h · 12720 s → 3h 32m · 86400 s → 1d · 446400 s → 5d 4h.
+export function formatRemaining(seconds: number): string {
+  const minutes = Math.max(1, Math.ceil(seconds / SECONDS_PER_MINUTE));
+  if (minutes < MINUTES_PER_HOUR) return `${minutes}m`;
+  if (minutes < MINUTES_PER_DAY) return twoUnits(Math.floor(minutes / MINUTES_PER_HOUR), "h", minutes % MINUTES_PER_HOUR, "m");
+  const hours = Math.floor((minutes % MINUTES_PER_DAY) / MINUTES_PER_HOUR);
+  return twoUnits(Math.floor(minutes / MINUTES_PER_DAY), "d", hours, "h");
 }

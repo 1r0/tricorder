@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bandForDeviation, budgetBand, DEFAULT_PACE, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S } from "../src/pace";
+import { bandForDeviation, budgetBand, DEFAULT_PACE, elapsedPct, FIVE_HOUR_WINDOW_S, formatRemaining, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, showsResetNote } from "../src/pace";
 
 const BAND = { early: "early", chill: "chill", onTrack: "onTrack", watchOut: "watchOut", hot: "hot", over: "over" } as const;
 const NOW_S = 1000;
@@ -119,4 +119,46 @@ BUDGET_EARLY.forEach((row) => {
   test(`budget $200, 1.67% of the month gone, $${row.spent} spent → ${row.band}`, () => {
     assert.equal(budgetBand(row.spent * PCT_PER_USD, EARLY_MONTH_PCT, DEFAULT_PACE), row.band);
   });
+});
+
+// Hand check: seconds left → text. Minutes are rounded up, so it never says 0m.
+const REMAINING = [
+  { seconds: 30, text: "1m" },
+  { seconds: 90, text: "2m" }, // 1.5 minutes rounds up
+  { seconds: 2520, text: "42m" }, // 42 x 60
+  { seconds: 3540, text: "59m" },
+  { seconds: 3600, text: "1h" }, // zero minutes are dropped
+  { seconds: 5401, text: "1h 31m" }, // 90.02 minutes rounds up to 91
+  { seconds: 12_720, text: "3h 32m" }, // 212 minutes
+  { seconds: 86_340, text: "23h 59m" },
+  { seconds: 86_400, text: "1d" },
+  { seconds: 446_400, text: "5d 4h" }, // 7440 minutes = 5 x 1440 + 240
+  { seconds: 483_840, text: "5d 14h" }, // 80% of 7 days = 8064 minutes = 5 x 1440 + 864
+] as const;
+
+REMAINING.forEach((r) => {
+  test(`formatRemaining: ${r.seconds} s → ${r.text}`, () => {
+    assert.equal(formatRemaining(r.seconds), r.text);
+  });
+});
+
+// Which bands show the note, per setting. null = no pace at all (window unknown).
+const NOTE_SHOWN = [
+  { from: "off", shows: [] },
+  { from: "hot", shows: [BAND.hot, BAND.over] },
+  { from: "watchOut", shows: [BAND.watchOut, BAND.hot, BAND.over] },
+  { from: "always", shows: [BAND.early, BAND.chill, BAND.onTrack, BAND.watchOut, BAND.hot, BAND.over, null] },
+] as const;
+const ALL_BANDS = [BAND.early, BAND.chill, BAND.onTrack, BAND.watchOut, BAND.hot, BAND.over, null] as const;
+
+NOTE_SHOWN.forEach((row) => {
+  test(`showsResetNote with "${row.from}": shows for ${row.shows.length} of ${ALL_BANDS.length} cases`, () => {
+    ALL_BANDS.forEach((band) => {
+      assert.equal(showsResetNote(band, row.from), (row.shows as readonly (string | null)[]).includes(band), `${band}`);
+    });
+  });
+});
+
+test("the default is to show the note from Hot", () => {
+  assert.equal(DEFAULT_PACE.resetNoteFrom, "hot");
 });

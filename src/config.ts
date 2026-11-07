@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { defaultFields, isAccountMode, FIELD_IDS, type AccountMode, type FieldId } from "./fields";
-import { DEFAULT_PACE, PCT_MAX, type PaceConfig } from "./pace";
+import { DEFAULT_PACE, isResetNoteFrom, PCT_MAX, type PaceConfig } from "./pace";
 
 const JSON_INDENT = 2;
 
@@ -114,6 +114,7 @@ function mergePace(base: PaceConfig, given: unknown): PaceConfig {
   return {
     marginPts: isPositive(g.marginPts) ? g.marginPts : base.marginPts,
     minElapsedPct: isShareBelowMax(g.minElapsedPct) ? g.minElapsedPct : base.minElapsedPct,
+    resetNoteFrom: isResetNoteFrom(g.resetNoteFrom) ? g.resetNoteFrom : base.resetNoteFrom,
   };
 }
 

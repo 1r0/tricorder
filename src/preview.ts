@@ -25,15 +25,16 @@ const CURRENT_PR_NUMBER = 12;
 const OTHER_PR_NUMBER = 13;
 const CONTEXT_USED_PCT = 42;
 const MODEL_NAME = "Opus 5.5";
-const PREVIEW_COLUMNS = "120"; // width the plan link is pushed to the right edge of
+const PREVIEW_COLUMNS = "140"; // width the plan link is pushed to the right edge of
 const RENDER_TIMEOUT_MS = 10_000;
 const MS_PER_S = 1000;
 // Made-up usage so both limits show a pace: 5h is 40% gone with 37% used (3 points
-// under an even pace: On track); 7d is 50% gone with 12% used (38 under: Chill).
+// under an even pace: On track); 7d is 20% gone with 60% used (40 over: Hot, so the
+// reset note shows: 80% of 7 days left is 5 days 14 hours).
 const FIVE_HOUR_USED_PCT = 37;
 const FIVE_HOUR_ELAPSED_PCT = 40;
-const SEVEN_DAY_USED_PCT = 12;
-const SEVEN_DAY_ELAPSED_PCT = 50;
+const SEVEN_DAY_USED_PCT = 60;
+const SEVEN_DAY_ELAPSED_PCT = 20;
 // Pay per use: an example budget, and a made-up spend that is exactly an even pace
 // through the month (so the animal is On track whatever the date).
 const EXAMPLE_BUDGET_USD = 200;

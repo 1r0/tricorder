@@ -40,7 +40,7 @@ const PAYG_ONLY: readonly AccountType[] = [PAYG];
 
 // Shared by the usage fields: what the animal and the colour of the percentage mean.
 const PACE_LEGEND =
-  "The animal and the colour compare your use with the time gone in the window: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = limit reached. In the first 3% of a window it is too early to tell, so a 🦥 sloth (grey) shows instead. (Margin and 3% are settings: statusline.pace.)";
+  "The animal and the colour compare your use with the time gone in the window: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = limit reached. In the first 3% of a window it is too early to tell, so a 🦥 sloth (grey) shows instead. When the pace is Hot, or the limit is used up, the time until it resets follows the percent, for example (reset in 42m). (Margin, 3% and when the time shows are settings: statusline.pace.)";
 
 // What the spend field shows and means, for accounts that pay per use.
 const SPEND_LEGEND =

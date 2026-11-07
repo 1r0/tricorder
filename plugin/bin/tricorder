@@ -30,7 +30,7 @@ function isAccountMode(value) {
 var EVERY_ACCOUNT = [SUBSCRIPTION, PAYG];
 var SUBSCRIPTION_ONLY = [SUBSCRIPTION];
 var PAYG_ONLY = [PAYG];
-var PACE_LEGEND = "The animal and the colour compare your use with the time gone in the window: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = limit reached. In the first 3% of a window it is too early to tell, so a \u{1F9A5} sloth (grey) shows instead. (Margin and 3% are settings: statusline.pace.)";
+var PACE_LEGEND = "The animal and the colour compare your use with the time gone in the window: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = limit reached. In the first 3% of a window it is too early to tell, so a \u{1F9A5} sloth (grey) shows instead. When the pace is Hot, or the limit is used up, the time until it resets follows the percent, for example (reset in 42m). (Margin, 3% and when the time shows are settings: statusline.pace.)";
 var SPEND_LEGEND = "\u{1F4B0} = spend this month, in US dollars (calendar month, UTC). With a budget the animal and the colour compare the share of the budget spent with the share of the month gone: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = over budget (more than 100% spent), \u{1F9A5} grey = the first 3% of the month, too early to tell. The budget is not a limit. The figure is an estimate kept by tricorder: it misses sessions without a statusline, other machines and other tools using the same key.";
 var FIELDS = [
   {
@@ -210,7 +210,12 @@ var PACE_STYLES = {
   over: { name: "Over", color: 95, icon: "\u{1F409}" }
   // magenta
 };
-var DEFAULT_PACE = { marginPts: 10, minElapsedPct: 3 };
+var WATCH_OUT = "watchOut";
+var RESET_NOTE_FROM = ["off", WATCH_OUT, "hot", "always"];
+function isResetNoteFrom(value) {
+  return RESET_NOTE_FROM.includes(value);
+}
+var DEFAULT_PACE = { marginPts: 10, minElapsedPct: 3, resetNoteFrom: "hot" };
 var FIVE_HOUR_WINDOW_S = 18e3;
 var SEVEN_DAY_WINDOW_S = 604800;
 var PCT_MAX = 100;
@@ -234,6 +239,26 @@ function budgetBand(usedPct, elapsed, cfg) {
 }
 function limitBand(usedPct, elapsed, cfg) {
   return usedPct >= PCT_MAX ? "over" : paceBand(usedPct, elapsed, cfg);
+}
+var NOTE_BANDS = {
+  watchOut: [WATCH_OUT, "hot", "over"],
+  hot: ["hot", "over"]
+};
+function showsResetNote(band, from) {
+  if (from === "off") return false;
+  if (from === "always") return true;
+  return band !== null && NOTE_BANDS[from].includes(band);
+}
+var SECONDS_PER_MINUTE = 60;
+var MINUTES_PER_HOUR = 60;
+var MINUTES_PER_DAY = 1440;
+var twoUnits = (big, bigUnit, small, smallUnit) => small ? `${big}${bigUnit} ${small}${smallUnit}` : `${big}${bigUnit}`;
+function formatRemaining(seconds) {
+  const minutes = Math.max(1, Math.ceil(seconds / SECONDS_PER_MINUTE));
+  if (minutes < MINUTES_PER_HOUR) return `${minutes}m`;
+  if (minutes < MINUTES_PER_DAY) return twoUnits(Math.floor(minutes / MINUTES_PER_HOUR), "h", minutes % MINUTES_PER_HOUR, "m");
+  const hours = Math.floor(minutes % MINUTES_PER_DAY / MINUTES_PER_HOUR);
+  return twoUnits(Math.floor(minutes / MINUTES_PER_DAY), "d", hours, "h");
 }
 
 // src/config.ts
@@ -297,7 +322,8 @@ function mergePace(base, given) {
   const g = typeof given === "object" && given !== null ? given : {};
   return {
     marginPts: isPositive(g.marginPts) ? g.marginPts : base.marginPts,
-    minElapsedPct: isShareBelowMax(g.minElapsedPct) ? g.minElapsedPct : base.minElapsedPct
+    minElapsedPct: isShareBelowMax(g.minElapsedPct) ? g.minElapsedPct : base.minElapsedPct,
+    resetNoteFrom: isResetNoteFrom(g.resetNoteFrom) ? g.resetNoteFrom : base.resetNoteFrom
   };
 }
 function mergeBudget(given) {
@@ -818,15 +844,20 @@ function contextSegment(cw) {
   return ICON_CTX + " " + sgr(ctxColor(pctInt), pctInt + "%");
 }
 var MS_PER_S = 1e3;
+function resetNote(remainingS, band, pace) {
+  return remainingS > 0 && showsResetNote(band, pace.resetNoteFrom) ? "(reset in " + formatRemaining(remainingS) + ")" : null;
+}
 function usageSegment(label, win, windowS, nowS, pace) {
   const used = win?.used_percentage;
   if (typeof used !== "number") return null;
   const pct = Math.round(used) + "%";
   const resets = win?.resets_at;
   const band = limitBand(used, typeof resets === "number" ? elapsedPct(resets, nowS, windowS) : null, pace);
-  if (band === null) return label + " " + pct;
+  const note = resetNote(typeof resets === "number" ? resets - nowS : 0, band, pace);
+  if (band === null) return [label + " " + pct, note].filter((s) => s !== null).join(" ");
   const style = PACE_STYLES[band];
-  return label + " " + style.icon + " " + sgr(style.color, pct);
+  const shown = [pct, note].filter((s) => s !== null).map((s) => sgr(style.color, s));
+  return label + " " + style.icon + " " + shown.join(" ");
 }
 var CENT_DIGITS = 2;
 function usd(amount) {
@@ -1585,13 +1616,13 @@ var CURRENT_PR_NUMBER = 12;
 var OTHER_PR_NUMBER = 13;
 var CONTEXT_USED_PCT = 42;
 var MODEL_NAME = "Opus 5.5";
-var PREVIEW_COLUMNS = "120";
+var PREVIEW_COLUMNS = "140";
 var RENDER_TIMEOUT_MS = 1e4;
 var MS_PER_S2 = 1e3;
 var FIVE_HOUR_USED_PCT = 37;
 var FIVE_HOUR_ELAPSED_PCT = 40;
-var SEVEN_DAY_USED_PCT = 12;
-var SEVEN_DAY_ELAPSED_PCT = 50;
+var SEVEN_DAY_USED_PCT = 60;
+var SEVEN_DAY_ELAPSED_PCT = 20;
 var EXAMPLE_BUDGET_USD = 200;
 var EXAMPLE_EMAIL = "you@example.com";
 var CENTS_PER_USD = 100;

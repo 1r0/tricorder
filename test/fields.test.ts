@@ -71,10 +71,17 @@ const BAD_PACE = { marginPts: -3, minElapsedPct: "x" } as const;
 
 test("mergeConfig: pace settings keep valid numbers; anything else keeps the default", () => {
   const ok = mergeConfig(DEFAULT_CONFIG, { statusline: { pace: CUSTOM_PACE } } as never);
-  assert.deepEqual(ok.statusline.pace, CUSTOM_PACE);
+  assert.deepEqual(ok.statusline.pace, { ...CUSTOM_PACE, resetNoteFrom: DEFAULT_CONFIG.statusline.pace.resetNoteFrom });
   const bad = mergeConfig(DEFAULT_CONFIG, { statusline: { pace: BAD_PACE } } as never);
   assert.deepEqual(bad.statusline.pace, DEFAULT_CONFIG.statusline.pace);
   assert.deepEqual(mergeConfig(DEFAULT_CONFIG, { muted: false }).statusline.pace, DEFAULT_CONFIG.statusline.pace);
+});
+
+test("mergeConfig: resetNoteFrom keeps a valid value; an invalid one keeps the default (hot)", () => {
+  const ok = mergeConfig(DEFAULT_CONFIG, { statusline: { pace: { resetNoteFrom: "always" } } } as never);
+  assert.equal(ok.statusline.pace.resetNoteFrom, "always");
+  const bad = mergeConfig(DEFAULT_CONFIG, { statusline: { pace: { resetNoteFrom: "sometimes" } } } as never);
+  assert.equal(bad.statusline.pace.resetNoteFrom, DEFAULT_CONFIG.statusline.pace.resetNoteFrom);
 });
 
 test("mergeConfig: an invalid mode falls back to auto", () => {

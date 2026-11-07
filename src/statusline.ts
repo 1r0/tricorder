@@ -14,7 +14,7 @@ import {
 import { detectAccount, readAccountEmail, resolveType } from "./account";
 import { currentBranch, isDirty } from "./git";
 import { remoteActive } from "./remote";
-import { budgetBand, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, type PaceConfig } from "./pace";
+import { budgetBand, elapsedPct, FIVE_HOUR_WINDOW_S, formatRemaining, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, showsResetNote, type PaceBand, type PaceConfig } from "./pace";
 import { monthElapsedPct, monthSpendUsd, recordCost } from "./spend";
 
 // ---- payload shape (subset of the statusline stdin JSON) -------------------
@@ -182,18 +182,26 @@ function contextSegment(cw: ContextWindow | undefined): string | null {
 
 const MS_PER_S = 1000;
 
+// "(reset in 42m)": the time until the limit resets, when the setting says this band shows it.
+function resetNote(remainingS: number, band: PaceBand | null, pace: PaceConfig): string | null {
+  return remainingS > 0 && showsResetNote(band, pace.resetNoteFrom) ? "(reset in " + formatRemaining(remainingS) + ")" : null;
+}
+
 // "5h 🐕 37%": the label, an animal for the pace, and the percent used in the
 // pace colour. Without a usable pace (window unknown or just started) only the
 // label and percent. Nothing when Claude Code sent no number for the limit.
+// For a Hot or used-up limit, "(reset in 42m)" follows in the same colour.
 function usageSegment(label: string, win: RateWindow | undefined, windowS: number, nowS: number, pace: PaceConfig): string | null {
   const used = win?.used_percentage;
   if (typeof used !== "number") return null;
   const pct = Math.round(used) + "%";
   const resets = win?.resets_at;
   const band = limitBand(used, typeof resets === "number" ? elapsedPct(resets, nowS, windowS) : null, pace);
-  if (band === null) return label + " " + pct;
+  const note = resetNote(typeof resets === "number" ? resets - nowS : 0, band, pace);
+  if (band === null) return [label + " " + pct, note].filter((s): s is string => s !== null).join(" ");
   const style = PACE_STYLES[band];
-  return label + " " + style.icon + " " + sgr(style.color, pct);
+  const shown = [pct, note].filter((s): s is string => s !== null).map((s) => sgr(style.color, s));
+  return label + " " + style.icon + " " + shown.join(" ");
 }
 
 // ---- monthly spend (pay per use) ---------------------------------------------

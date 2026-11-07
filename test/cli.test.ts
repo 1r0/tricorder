@@ -139,7 +139,7 @@ test("fields questions: options are listed in the order the statusline draws the
 });
 
 // Hand check: with every field on, the made-up session shows these four lines.
-const PREVIEW_LINE_1_START = "🔇 🌳 fix-login* (#12) · 🔋 42% · Opus 5.5 · 5h 🐕 37% · 7d 🐢 12%";
+const PREVIEW_LINE_1_START = "🔇 🌳 fix-login* (#12) · 🔋 42% · Opus 5.5 · 5h 🐕 37% · 7d 🦅 60% (reset in 5d 14h)";
 const PREVIEW_LINE_1_END = "🗺️ plan  you@example.com";
 const PREVIEW_LINES = ["add-tests (#13)", "🤖 Explore Opus 4.8, review Sonnet 5"];
 const PREVIEW_SHIP = "o≡≡≡>";
@@ -202,7 +202,7 @@ test("fields preview on a pay-per-use account shows spend with an example budget
 
 test("fields preview on a subscription shows the usage limits and no spend", () => {
   const out = run(sandbox(), ["fields", "preview"], { configDir: accountDir(SUBSCRIPTION_ACCOUNT) }).stdout;
-  assert.ok(out.includes("5h 🐕 37%") && out.includes("7d 🐢 12%"));
+  assert.ok(out.includes("5h 🐕 37%") && out.includes("7d 🦅 60% (reset in 5d 14h)"));
   assert.ok(!out.includes("💰"));
 });
 
