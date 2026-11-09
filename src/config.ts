@@ -93,7 +93,9 @@ export function loadConfig(): Config {
 }
 
 function mergeStatusline(base: StatuslineConfig, override: Partial<StatuslineConfig> | undefined): StatuslineConfig {
+  // Cast: the config file is user-edited JSON, so each value is checked with typeof below.
   const given = override?.fields as Partial<Record<string, unknown>> | undefined;
+  // Cast is safe: the keys come from FIELD_IDS, so every FieldId is present.
   const fields = Object.fromEntries(
     FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]] as const),
   ) as Record<FieldId, boolean>;

@@ -214,8 +214,8 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
     .join(SEP);
   // Passive mute indicator only (audio control lives in the menu-bar app now).
   const showMute = cfg.muted && on.muteIcon;
-  const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
-  const plan = session === "" || !on.plan ? null : getPlan(session);
+  const left = showMute ? [ICON_MUTED, mid].filter(Boolean).join(" ") : mid;
+  const plan = !session || !on.plan ? null : getPlan(session);
   if (plan === null) return left;
   const right = openLink(plan, ICON_MAP + " " + sgr(DIM, "plan"));
   const width = terminalWidth();
@@ -230,7 +230,7 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
 // can make the same worktree look like two different paths.
 function worktreeLine(session: string, loc: Location, cfg: Config): string | null {
   const others = readWorktrees(session).filter((w) => w.branch !== loc.branch);
-  if (others.length === 0) return null;
+  if (!others.length) return null;
   const showPrs = cfg.statusline.fields.prs;
   return others
     .map((w) => worktreeLink(w.path, w.branch, cfg.worktreeClick) + (showPrs ? prSuffix(session, w.branch) : ""))

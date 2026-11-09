@@ -106,5 +106,6 @@ export function isFieldId(value: unknown): value is FieldId {
 }
 
 export function defaultFields(): Record<FieldId, boolean> {
+  // Cast is safe: the keys come from FIELD_IDS, so every FieldId is present.
   return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn])) as Record<FieldId, boolean>;
 }

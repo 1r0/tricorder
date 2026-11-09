@@ -25,7 +25,7 @@ export function parseFieldList(arg: string): { readonly ids: readonly FieldId[];
   const parts = arg
     .split(",")
     .map((p) => p.trim())
-    .filter((p) => p !== "");
+    .filter(Boolean);
   return { ids: parts.filter(isFieldId), unknown: parts.filter((p) => !isFieldId(p)) };
 }
 
@@ -43,6 +43,7 @@ export function setFields(arg: string | undefined): void {
     return;
   }
   const cfg = loadConfig();
+  // Cast is safe: the keys come from FIELD_IDS, so every FieldId is present.
   const fields = Object.fromEntries(FIELDS.map((f) => [f.id, ids.includes(f.id)])) as Record<FieldId, boolean>;
   saveConfig({ ...cfg, statusline: { fields } });
   log("fields set → " + ids.join(","));
