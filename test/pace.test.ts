@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bandForDeviation, DEFAULT_PACE, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S } from "../src/pace";
+import { bandForDeviation, DEFAULT_PACE, elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, resetsAtS, SEVEN_DAY_WINDOW_S, type PaceBand } from "../src/pace";
 
-const BAND = { early: "early", chill: "chill", onTrack: "onTrack", watchOut: "watchOut", hot: "hot", over: "over" } as const;
+// Each band spelled out once for the tests; `satisfies` makes it a compile error if the bands in src/pace.ts change.
+const BAND = { early: "early", chill: "chill", onTrack: "onTrack", watchOut: "watchOut", hot: "hot", over: "over" } as const satisfies { readonly [K in PaceBand]: K };
 const NOW_S = 1000;
 const EPSILON = 1e-9;
 const HALF_WINDOW = 50; // percent of the window gone
@@ -19,6 +20,12 @@ ELAPSED.forEach((row) => {
   test(`elapsedPct: ${row.label}`, () => {
     assert.ok(Math.abs(elapsedPct(NOW_S + row.endsInS, NOW_S, row.windowS) - row.gone) < EPSILON);
   });
+});
+
+test("resetsAtS is the inverse of elapsedPct: half of an 18000 s window gone at second 1000 ends at 10000", () => {
+  const END_S = 10_000; // 1000 + 9000 s left
+  assert.equal(resetsAtS(HALF_WINDOW, NOW_S, FIVE_HOUR_WINDOW_S), END_S);
+  assert.ok(Math.abs(elapsedPct(END_S, NOW_S, FIVE_HOUR_WINDOW_S) - HALF_WINDOW) < EPSILON);
 });
 
 test("windows: 5 hours = 18000 s, 7 days = 604800 s", () => {

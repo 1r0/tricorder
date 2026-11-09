@@ -12,7 +12,7 @@ import {
   setModel,
 } from "./state";
 import { currentBranch, isDirty } from "./git";
-import { elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, type PaceConfig } from "./pace";
+import { elapsedPct, FIVE_HOUR_WINDOW_S, limitBand, MS_PER_S, PACE_STYLES, SEVEN_DAY_WINDOW_S, type PaceConfig } from "./pace";
 
 // ---- payload shape (subset of the statusline stdin JSON) -------------------
 
@@ -165,8 +165,6 @@ function contextSegment(cw: ContextWindow | undefined): string | null {
 
 // ---- usage limits (5h / 7d) with pace ---------------------------------------
 
-const MS_PER_S = 1000;
-
 // "5h 🐕 37%": the label, an animal for the pace, and the percent used in the
 // pace colour. Without a usable pace (window unknown or just started) only the
 // label and percent. Nothing when Claude Code sent no number for the limit.
@@ -249,7 +247,7 @@ function terminalWidth(): number {
 function line1(p: Payload, session: string, loc: Location, cfg: Config): string {
   const on = cfg.statusline.fields;
   // git is only asked when the field is on, so switching it off also saves the call.
-  const dirty = on.location && on.dirty && loc.path !== "" && isDirty(loc.path) === true;
+  const dirty = on.location && on.dirty && Boolean(loc.path) && isDirty(loc.path) === true;
   const nowS = Date.now() / MS_PER_S;
   const mid = [
     on.location ? locationSegment(loc, session, { mode: cfg.worktreeClick, showPrs: on.prs, dirty }) : null,
@@ -262,8 +260,8 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
     .join(SEP);
   // Passive mute indicator only (audio control lives in the menu-bar app now).
   const showMute = cfg.muted && on.muteIcon;
-  const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
-  const plan = session === "" || !on.plan ? null : getPlan(session);
+  const left = showMute ? [ICON_MUTED, mid].filter(Boolean).join(" ") : mid;
+  const plan = !session || !on.plan ? null : getPlan(session);
   if (plan === null) return left;
   const right = openLink(plan, ICON_MAP + " " + sgr(DIM, "plan"));
   const width = terminalWidth();
@@ -278,7 +276,7 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
 // can make the same worktree look like two different paths.
 function worktreeLine(session: string, loc: Location, cfg: Config): string | null {
   const others = readWorktrees(session).filter((w) => w.branch !== loc.branch);
-  if (others.length === 0) return null;
+  if (!others.length) return null;
   const showPrs = cfg.statusline.fields.prs;
   return others
     .map((w) => worktreeLink(w.path, w.branch, cfg.worktreeClick) + (showPrs ? prSuffix(session, w.branch) : ""))

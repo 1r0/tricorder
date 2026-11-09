@@ -6,8 +6,6 @@
 // Pure functions only, so the numbers can be checked by hand (see
 // test/pace.test.ts). This file must not import from config.ts.
 
-export type PaceBand = "early" | "chill" | "onTrack" | "watchOut" | "hot" | "over";
-
 export interface PaceStyle {
   readonly name: string;
   // Terminal colour code (the part between "ESC[" and "m").
@@ -26,7 +24,10 @@ export const PACE_STYLES = {
   watchOut: { name: "Watch out", color: "38;5;214", icon: "🐎" }, // orange
   hot: { name: "Hot", color: 91, icon: "🦅" }, // red; the eagle is the closest emoji to a hawk
   over: { name: "Over", color: 95, icon: "🐉" }, // magenta
-} as const satisfies Record<PaceBand, PaceStyle>;
+} as const satisfies Readonly<Record<string, PaceStyle>>;
+
+// Derived from the table above, so a new band is added in one place.
+export type PaceBand = keyof typeof PACE_STYLES;
 
 export interface PaceConfig {
   // Width of the "On track" band, in percentage points either side of even pace.
@@ -44,6 +45,7 @@ export const FIVE_HOUR_WINDOW_S = 18_000; // 5 hours
 export const SEVEN_DAY_WINDOW_S = 604_800; // 7 days
 
 export const PCT_MAX = 100;
+export const MS_PER_S = 1000;
 // The band boundaries are multiples of the margin: Watch out reaches 2 margins.
 const WATCH_OUT_MARGINS = 2;
 
@@ -52,6 +54,12 @@ const WATCH_OUT_MARGINS = 2;
 // Hand check: window 18000 s, ends in 9000 s → half gone → 50.
 export function elapsedPct(resetsAtS: number, nowS: number, windowS: number): number {
   return (1 - (resetsAtS - nowS) / windowS) * PCT_MAX;
+}
+
+// Inverse of elapsedPct: when a window that is `elapsedPctGone` percent gone ends,
+// in epoch seconds. Hand check: 50% of an 18000 s window gone at second 1000 → ends at 1000 + 9000 = 10000.
+export function resetsAtS(elapsedPctGone: number, nowS: number, windowS: number): number {
+  return nowS + (1 - elapsedPctGone / PCT_MAX) * windowS;
 }
 
 // Chill below -margin, On track within ±margin, Watch out up to 2 margins
