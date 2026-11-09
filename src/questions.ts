@@ -8,7 +8,7 @@ export const ENABLE_ALL_LABEL = "Enable all";
 const OPTIONS_PER_QUESTION = 4;
 const QUESTIONS_PER_CALL = 4;
 const MIN_OPTIONS = 2;
-const HEADER_MAX_CHARS = 12;
+export const HEADER_MAX_CHARS = 12;
 
 export interface QuestionField {
   readonly id: string;

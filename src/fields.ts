@@ -8,21 +8,32 @@
 // "subscription" = signed in with a Claude account (Pro, Max, Team...).
 // "payg"         = pay per use: an API key or a cloud-provider login.
 // "unknown"      = the account could not be detected; every field is offered.
-export type AccountType = "subscription" | "payg";
-export type DetectedType = AccountType | "unknown";
+export const SUBSCRIPTION = "subscription";
+export const PAYG = "payg";
+export const UNKNOWN = "unknown";
+export const AUTO = "auto";
 
-export const ACCOUNT_MODES = ["auto", "subscription", "payg"] as const;
+// Each fixed set is written once; the types and the other sets are derived from it.
+export const ACCOUNT_TYPES = [SUBSCRIPTION, PAYG] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
+
+export const DETECTED_TYPES = [...ACCOUNT_TYPES, UNKNOWN] as const;
+export type DetectedType = (typeof DETECTED_TYPES)[number];
+
+export const ACCOUNT_MODES = [AUTO, ...ACCOUNT_TYPES] as const;
 export type AccountMode = (typeof ACCOUNT_MODES)[number];
 
 export function isAccountMode(value: unknown): value is AccountMode {
   return (ACCOUNT_MODES as readonly unknown[]).includes(value);
 }
 
+export function isDetectedType(value: unknown): value is DetectedType {
+  return (DETECTED_TYPES as readonly unknown[]).includes(value);
+}
+
 export interface FieldInfo {
   readonly id: string;
   readonly name: string;
-  // Which statusline line the field is drawn on (for grouping in setup).
-  readonly line: "main" | "worktrees" | "subagents" | "intro";
   readonly shows: string;
   // Example output, as plain text.
   readonly sample: string;
@@ -32,7 +43,7 @@ export interface FieldInfo {
   readonly defaultOn: boolean;
 }
 
-const EVERY_ACCOUNT: readonly AccountType[] = ["subscription", "payg"];
+const EVERY_ACCOUNT: readonly AccountType[] = ACCOUNT_TYPES;
 
 // Order here is the order the fields appear on the statusline, left to right,
 // then top to bottom (line 1: mute icon, location with its uncommitted-changes
@@ -44,7 +55,6 @@ export const FIELDS = [
   {
     id: "muteIcon",
     name: "Mute icon",
-    line: "main",
     shows: "A speaker icon at the start of the line while sounds are muted.",
     sample: "🔇",
     legend: "🔇 = sounds are muted.",
@@ -54,7 +64,6 @@ export const FIELDS = [
   {
     id: "location",
     name: "Location",
-    line: "main",
     shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
     sample: "my-repo(main)   or   🌳 fix-login",
     legend: "Clicking opens the folder, copies the path, or both (see worktreeClick in the config).",
@@ -74,7 +83,6 @@ export const FIELDS = [
   {
     id: "prs",
     name: "Pull requests",
-    line: "main",
     shows: "A clickable tag for each pull request this session opened from the current branch.",
     sample: "(#12)",
     legend: "Cyan.",
@@ -84,7 +92,6 @@ export const FIELDS = [
   {
     id: "context",
     name: "Context window",
-    line: "main",
     shows: "How full the model's context window is.",
     sample: "🔋 42%",
     legend: "🔋 = context window. Green below 70%, yellow 70-89%, red from 90%.",
@@ -94,7 +101,6 @@ export const FIELDS = [
   {
     id: "model",
     name: "Model",
-    line: "main",
     shows: "The name of the model this session is using.",
     sample: "Opus 5.5",
     legend: "",
@@ -104,7 +110,6 @@ export const FIELDS = [
   {
     id: "plan",
     name: "Plan link",
-    line: "main",
     shows: "A link to the current plan file, at the right edge, once the session has one.",
     sample: "🗺️ plan",
     legend: "🗺️ = plan file. Grey text.",
@@ -114,7 +119,6 @@ export const FIELDS = [
   {
     id: "worktrees",
     name: "Other worktrees",
-    line: "worktrees",
     shows: "A second line listing the other worktrees this session has visited, each with its pull requests.",
     sample: "fix-login (#12)  add-tests",
     legend: "",
@@ -124,7 +128,6 @@ export const FIELDS = [
   {
     id: "subagents",
     name: "Sub-agents",
-    line: "subagents",
     shows: "A line listing the sub-agents running right now, with the model each one uses.",
     sample: "🤖 Explore Opus 4.8, review Sonnet 5",
     legend: "🤖 = sub-agents. Model names in grey.",
@@ -134,7 +137,6 @@ export const FIELDS = [
   {
     id: "intro",
     name: "Start-up animation",
-    line: "intro",
     shows: "A small ship that crosses the line for the first 4 seconds of a session.",
     sample: "o≡≡≡>",
     legend: "Cyan.",
@@ -152,12 +154,19 @@ export function isFieldId(value: unknown): value is FieldId {
   return (FIELD_IDS as readonly unknown[]).includes(value);
 }
 
-export function defaultFields(): Record<FieldId, boolean> {
-  return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn])) as Record<FieldId, boolean>;
+// The one place a per-field table is built. Every FieldId is present because the
+// keys come from FIELD_IDS, which is why the cast is safe; callers need no cast of their own.
+export function buildFields(valueFor: (id: FieldId) => boolean): Readonly<Record<FieldId, boolean>> {
+  return Object.fromEntries(FIELD_IDS.map((id) => [id, valueFor(id)])) as Record<FieldId, boolean>;
+}
+
+export function defaultFields(): Readonly<Record<FieldId, boolean>> {
+  return buildFields((id) => FIELDS.some((f) => f.id === id && f.defaultOn));
 }
 
 // A field applies to an account type if it lists it. An undetected account
 // ("unknown") is offered every field, so nothing is hidden by a wrong guess.
 export function fieldsFor(type: DetectedType): readonly Field[] {
-  return FIELDS.filter((f) => type === "unknown" || (f.appliesTo as readonly AccountType[]).includes(type));
+  // Cast: `as const` gives each field its own tuple type; widened here so one `includes` fits all of them.
+  return FIELDS.filter((f) => type === UNKNOWN || (f.appliesTo as readonly AccountType[]).includes(type));
 }

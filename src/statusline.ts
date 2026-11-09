@@ -219,7 +219,7 @@ function terminalWidth(): number {
 function line1(p: Payload, session: string, loc: Location, cfg: Config): string {
   const on = cfg.statusline.fields;
   // git is only asked when the field is on, so switching it off also saves the call.
-  const dirty = on.location && on.dirty && loc.path !== "" && isDirty(loc.path) === true;
+  const dirty = on.location && on.dirty && Boolean(loc.path) && isDirty(loc.path) === true;
   const mid = [
     on.location ? locationSegment(loc, session, { mode: cfg.worktreeClick, showPrs: on.prs, dirty }) : null,
     on.context ? contextSegment(p.context_window) : null,
@@ -229,8 +229,8 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
     .join(SEP);
   // Passive mute indicator only (audio control lives in the menu-bar app now).
   const showMute = cfg.muted && on.muteIcon;
-  const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
-  const plan = session === "" || !on.plan ? null : getPlan(session);
+  const left = showMute ? [ICON_MUTED, mid].filter(Boolean).join(" ") : mid;
+  const plan = !session || !on.plan ? null : getPlan(session);
   if (plan === null) return left;
   const right = openLink(plan, ICON_MAP + " " + sgr(DIM, "plan"));
   const width = terminalWidth();
@@ -245,7 +245,7 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
 // can make the same worktree look like two different paths.
 function worktreeLine(session: string, loc: Location, cfg: Config): string | null {
   const others = readWorktrees(session).filter((w) => w.branch !== loc.branch);
-  if (others.length === 0) return null;
+  if (!others.length) return null;
   const showPrs = cfg.statusline.fields.prs;
   return others
     .map((w) => worktreeLink(w.path, w.branch, cfg.worktreeClick) + (showPrs ? prSuffix(session, w.branch) : ""))

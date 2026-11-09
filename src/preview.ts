@@ -13,6 +13,8 @@ import { plainText, renderStatusline } from "./statusline";
 // Everything happens in a throwaway home folder: your own config and session
 // state are only read, never written.
 
+// Name of the internal sub-command `fields preview` runs inside the throwaway home.
+export const PREVIEW_RENDER = "preview-render";
 const SESSION = "preview";
 const EXAMPLE_DIR_NAME = "example"; // inside the throwaway home folder
 const EXAMPLE_PR_URL = "https://example.invalid/pull/";
@@ -78,7 +80,9 @@ export function previewFields(): void {
     // seconds of a session it replaces the whole line.
     const fields = { ...cfg.statusline.fields, intro: false };
     writeFileSync(join(dir, "config.json"), serialize({ ...cfg, muted: true, statusline: { ...cfg.statusline, fields } }));
-    const drawn = execFileSync(process.execPath, [process.argv[1] ?? "", "fields", "preview-render"], {
+    const script = process.argv[1];
+    if (!script) throw new Error("tricorder: cannot preview, the path of this program is unknown");
+    const drawn = execFileSync(process.execPath, [script, "fields", PREVIEW_RENDER], {
       env: { PATH: process.env.PATH ?? "", HOME: home, COLUMNS: PREVIEW_COLUMNS },
       encoding: "utf8",
       timeout: RENDER_TIMEOUT_MS,

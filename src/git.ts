@@ -59,7 +59,7 @@ export function currentBranch(cwd: string): string | null {
 // staged or new (untracked) files. null = not a git folder, or git failed.
 export function isDirty(cwd: string): boolean | null {
   const out = run(["status", "--porcelain"], cwd);
-  return out === null ? null : out.trim() !== "";
+  return out === null ? null : Boolean(out.trim());
 }
 
 export interface WorktreeEntry {
