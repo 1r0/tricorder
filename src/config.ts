@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { defaultFields, isAccountMode, FIELD_IDS, type AccountMode, type FieldId } from "./fields";
+import { AUTO, buildFields, defaultFields, isAccountMode, type AccountMode, type FieldId } from "./fields";
 
 const JSON_INDENT = 2;
 
@@ -38,7 +38,7 @@ export function isWorktreeClickMode(value: unknown): value is WorktreeClickMode 
 // Which statusline fields are drawn (see src/fields.ts for the list), and how
 // the account type is decided.
 export interface StatuslineConfig {
-  readonly fields: Record<FieldId, boolean>;
+  readonly fields: Readonly<Record<FieldId, boolean>>;
   // "auto" detects the account type; the other two force it.
   readonly mode: AccountMode;
 }
@@ -55,7 +55,7 @@ export const DEFAULT_CONFIG: Config = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields(), mode: "auto" },
+  statusline: { fields: defaultFields(), mode: AUTO },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -96,10 +96,12 @@ export function loadConfig(): Config {
 }
 
 function mergeStatusline(base: StatuslineConfig, override: Partial<StatuslineConfig> | undefined): StatuslineConfig {
+  // Cast: the config file is user-edited JSON, so each value is checked with typeof below.
   const given = override?.fields as Partial<Record<string, unknown>> | undefined;
-  const fields = Object.fromEntries(
-    FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]] as const),
-  ) as Record<FieldId, boolean>;
+  const fields = buildFields((id) => {
+    const value = given?.[id];
+    return typeof value === "boolean" ? value : base.fields[id];
+  });
   return { fields, mode: isAccountMode(override?.mode) ? override.mode : base.mode };
 }
 

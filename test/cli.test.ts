@@ -8,6 +8,8 @@ import { plain, readConfig, run, sandbox, writeConfig } from "./helpers";
 const CONTEXT_USED_PCT = 42; // hand check: 42% used shows as "🔋 42%"
 const ACCOUNT_SUBSCRIPTION = "subscription";
 const ACCOUNT_DIR_PREFIX = "tricorder-acct-";
+const DESCRIBE = "describe";
+const QUESTIONS = "questions";
 // Hand count for a subscription: 9 fields + "Enable all" = 10 options → 4, 4, 2.
 const SUBSCRIPTION = { fields: 9, optionCounts: [4, 4, 2] } as const;
 
@@ -41,6 +43,15 @@ test("statusline: with every line-1 field off nothing is printed", () => {
   const box = sandbox();
   writeConfig(box, { statusline: { fields: { location: false, context: false, model: false, muteIcon: false } } });
   assert.equal(statusline(box, project()), "");
+});
+
+test("fields: an unknown sub-command, even an inherited name like toString, prints usage and fails", () => {
+  const box = sandbox();
+  ["bogus", "toString"].forEach((name) => {
+    const r = run(box, ["fields", name]);
+    assert.equal(r.status, 1, name);
+    assert.ok(r.stderr.includes("usage: tricorder fields"), name);
+  });
 });
 
 test("fields set: exactly the listed fields are on, the rest are off", () => {
@@ -101,7 +112,7 @@ test("detect: a config folder with no account entry is pay per use; a missing fi
 test("fields describe: lists fields with their explanation and on/off state", () => {
   const box = sandbox();
   run(box, ["fields", "set", "model"]);
-  const out = JSON.parse(run(box, ["fields", "describe", "payg"]).stdout);
+  const out = JSON.parse(run(box, ["fields", DESCRIBE, "payg"]).stdout);
   assert.equal(out.type, "payg");
   const model = out.fields.find((f: { id: string }) => f.id === "model");
   assert.equal(model.enabled, true);
@@ -109,9 +120,19 @@ test("fields describe: lists fields with their explanation and on/off state", ()
   assert.equal(out.fields.find((f: { id: string }) => f.id === "context").enabled, false);
 });
 
+test("fields describe/questions: an unknown account type fails instead of being guessed", () => {
+  const box = sandbox();
+  [DESCRIBE, QUESTIONS].forEach((sub) => {
+    const r = run(box, ["fields", sub, "subscripton"]);
+    assert.equal(r.status, 1, sub);
+    assert.ok(r.stderr.includes("unknown account type: subscripton"), sub);
+    assert.equal(r.stdout, "", sub);
+  });
+});
+
 test("fields questions: for a subscription gives 3 questions (4, 4, 2 options) in one call", () => {
   const box = sandbox();
-  const out = JSON.parse(run(box, ["fields", "questions", ACCOUNT_SUBSCRIPTION]).stdout);
+  const out = JSON.parse(run(box, ["fields", QUESTIONS, ACCOUNT_SUBSCRIPTION]).stdout);
   assert.equal(out.calls.length, 1);
   assert.deepEqual(out.calls[0].map((q: { options: unknown[] }) => q.options.length), SUBSCRIPTION.optionCounts);
   assert.equal(out.labels["Context window"], "context");
@@ -126,7 +147,7 @@ const QUESTION_LABELS_IN_ORDER = [
 
 test("fields questions: options are listed in the order the statusline draws the fields", () => {
   const box = sandbox();
-  const out = JSON.parse(run(box, ["fields", "questions", ACCOUNT_SUBSCRIPTION]).stdout);
+  const out = JSON.parse(run(box, ["fields", QUESTIONS, ACCOUNT_SUBSCRIPTION]).stdout);
   const labels = out.calls.flat().flatMap((q: { options: { label: string }[] }) => q.options.map((o) => o.label));
   assert.deepEqual(labels, QUESTION_LABELS_IN_ORDER);
 });

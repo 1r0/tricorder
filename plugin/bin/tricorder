@@ -21,16 +21,24 @@ var import_node_path = require("node:path");
 var import_node_fs2 = require("node:fs");
 
 // src/fields.ts
-var ACCOUNT_MODES = ["auto", "subscription", "payg"];
+var SUBSCRIPTION = "subscription";
+var PAYG = "payg";
+var UNKNOWN = "unknown";
+var AUTO = "auto";
+var ACCOUNT_TYPES = [SUBSCRIPTION, PAYG];
+var DETECTED_TYPES = [...ACCOUNT_TYPES, UNKNOWN];
+var ACCOUNT_MODES = [AUTO, ...ACCOUNT_TYPES];
 function isAccountMode(value) {
   return ACCOUNT_MODES.includes(value);
 }
-var EVERY_ACCOUNT = ["subscription", "payg"];
+function isDetectedType(value) {
+  return DETECTED_TYPES.includes(value);
+}
+var EVERY_ACCOUNT = ACCOUNT_TYPES;
 var FIELDS = [
   {
     id: "muteIcon",
     name: "Mute icon",
-    line: "main",
     shows: "A speaker icon at the start of the line while sounds are muted.",
     sample: "\u{1F507}",
     legend: "\u{1F507} = sounds are muted.",
@@ -40,7 +48,6 @@ var FIELDS = [
   {
     id: "location",
     name: "Location",
-    line: "main",
     shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
     sample: "my-repo(main)   or   \u{1F333} fix-login",
     legend: "Clicking opens the folder, copies the path, or both (see worktreeClick in the config).",
@@ -50,7 +57,6 @@ var FIELDS = [
   {
     id: "prs",
     name: "Pull requests",
-    line: "main",
     shows: "A clickable tag for each pull request this session opened from the current branch.",
     sample: "(#12)",
     legend: "Cyan.",
@@ -60,7 +66,6 @@ var FIELDS = [
   {
     id: "context",
     name: "Context window",
-    line: "main",
     shows: "How full the model's context window is.",
     sample: "\u{1F50B} 42%",
     legend: "\u{1F50B} = context window. Green below 70%, yellow 70-89%, red from 90%.",
@@ -70,7 +75,6 @@ var FIELDS = [
   {
     id: "model",
     name: "Model",
-    line: "main",
     shows: "The name of the model this session is using.",
     sample: "Opus 5.5",
     legend: "",
@@ -80,7 +84,6 @@ var FIELDS = [
   {
     id: "plan",
     name: "Plan link",
-    line: "main",
     shows: "A link to the current plan file, at the right edge, once the session has one.",
     sample: "\u{1F5FA}\uFE0F plan",
     legend: "\u{1F5FA}\uFE0F = plan file. Grey text.",
@@ -90,7 +93,6 @@ var FIELDS = [
   {
     id: "worktrees",
     name: "Other worktrees",
-    line: "worktrees",
     shows: "A second line listing the other worktrees this session has visited, each with its pull requests.",
     sample: "fix-login (#12)  add-tests",
     legend: "",
@@ -100,7 +102,6 @@ var FIELDS = [
   {
     id: "subagents",
     name: "Sub-agents",
-    line: "subagents",
     shows: "A line listing the sub-agents running right now, with the model each one uses.",
     sample: "\u{1F916} Explore Opus 4.8, review Sonnet 5",
     legend: "\u{1F916} = sub-agents. Model names in grey.",
@@ -110,7 +111,6 @@ var FIELDS = [
   {
     id: "intro",
     name: "Start-up animation",
-    line: "intro",
     shows: "A small ship that crosses the line for the first 4 seconds of a session.",
     sample: "o\u2261\u2261\u2261>",
     legend: "Cyan.",
@@ -122,11 +122,14 @@ var FIELD_IDS = FIELDS.map((f) => f.id);
 function isFieldId(value) {
   return FIELD_IDS.includes(value);
 }
+function buildFields(valueFor) {
+  return Object.fromEntries(FIELD_IDS.map((id) => [id, valueFor(id)]));
+}
 function defaultFields() {
-  return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn]));
+  return buildFields((id) => FIELDS.some((f) => f.id === id && f.defaultOn));
 }
 function fieldsFor(type) {
-  return FIELDS.filter((f) => type === "unknown" || f.appliesTo.includes(type));
+  return FIELDS.filter((f) => type === UNKNOWN || f.appliesTo.includes(type));
 }
 
 // src/config.ts
@@ -148,7 +151,7 @@ var DEFAULT_CONFIG = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields(), mode: "auto" },
+  statusline: { fields: defaultFields(), mode: AUTO },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -185,9 +188,10 @@ function loadConfig() {
 }
 function mergeStatusline(base, override) {
   const given = override?.fields;
-  const fields2 = Object.fromEntries(
-    FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]])
-  );
+  const fields2 = buildFields((id) => {
+    const value = given?.[id];
+    return typeof value === "boolean" ? value : base.fields[id];
+  });
   return { fields: fields2, mode: isAccountMode(override?.mode) ? override.mode : base.mode };
 }
 function mergeConfig(base, override) {
@@ -578,8 +582,8 @@ function line1(p, session, loc, cfg) {
     on.model ? p.model?.display_name ?? null : null
   ].filter((s) => s !== null && s !== "").join(SEP);
   const showMute = cfg.muted && on.muteIcon;
-  const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
-  const plan = session === "" || !on.plan ? null : getPlan(session);
+  const left = showMute ? [ICON_MUTED, mid].filter(Boolean).join(" ") : mid;
+  const plan = !session || !on.plan ? null : getPlan(session);
   if (plan === null) return left;
   const right = openLink(plan, ICON_MAP + " " + sgr(DIM, "plan"));
   const width = terminalWidth();
@@ -588,7 +592,7 @@ function line1(p, session, loc, cfg) {
 }
 function worktreeLine(session, loc, cfg) {
   const others = readWorktrees(session).filter((w) => w.branch !== loc.branch);
-  if (others.length === 0) return null;
+  if (!others.length) return null;
   const showPrs = cfg.statusline.fields.prs;
   return others.map((w) => worktreeLink(w.path, w.branch, cfg.worktreeClick) + (showPrs ? prSuffix(session, w.branch) : "")).join("  ");
 }
@@ -1203,23 +1207,26 @@ function worktreeClick(arg) {
 // src/account.ts
 var import_node_fs8 = require("node:fs");
 var import_node_path8 = require("node:path");
-var UNKNOWN_ACCOUNT = { type: "unknown", plan: null, extraUsage: false };
+var UNKNOWN_ACCOUNT = { type: UNKNOWN, plan: null, extraUsage: false };
+function readField(value, key) {
+  return typeof value === "object" && value !== null && key in value ? value[key] : void 0;
+}
 function classify(parsed) {
   if (typeof parsed !== "object" || parsed === null) return UNKNOWN_ACCOUNT;
-  const oauth = parsed.oauthAccount;
-  if (typeof oauth !== "object" || oauth === null) return { type: "payg", plan: null, extraUsage: false };
-  const account = oauth;
+  const oauth = readField(parsed, "oauthAccount");
+  if (typeof oauth !== "object" || oauth === null) return { type: PAYG, plan: null, extraUsage: false };
+  const plan = readField(oauth, "organizationType");
   return {
-    type: "subscription",
-    plan: typeof account.organizationType === "string" ? account.organizationType : null,
-    extraUsage: account.hasExtraUsageEnabled === true
+    type: SUBSCRIPTION,
+    plan: typeof plan === "string" ? plan : null,
+    extraUsage: readField(oauth, "hasExtraUsageEnabled") === true
   };
 }
 function accountFilePath() {
   const dir = process.env.CLAUDE_CONFIG_DIR;
-  if (dir !== void 0 && dir !== "") return (0, import_node_path8.join)(dir, ".claude.json");
+  if (dir) return (0, import_node_path8.join)(dir, ".claude.json");
   const home = process.env.HOME;
-  return home === void 0 || home === "" ? null : (0, import_node_path8.join)(home, ".claude.json");
+  return home ? (0, import_node_path8.join)(home, ".claude.json") : null;
 }
 function detectAccount() {
   const file = accountFilePath();
@@ -1231,7 +1238,7 @@ function detectAccount() {
   }
 }
 function resolveType(mode, detected) {
-  return mode === "auto" ? detected : mode;
+  return mode === AUTO ? detected : mode;
 }
 
 // src/preview.ts
@@ -1239,6 +1246,7 @@ var import_node_child_process4 = require("node:child_process");
 var import_node_fs9 = require("node:fs");
 var import_node_os2 = require("node:os");
 var import_node_path9 = require("node:path");
+var PREVIEW_RENDER = "preview-render";
 var SESSION = "preview";
 var EXAMPLE_DIR = "/example";
 var EXAMPLE_PR_URL = "https://example.invalid/pull/";
@@ -1279,7 +1287,9 @@ function previewFields() {
     (0, import_node_fs9.mkdirSync)(dir, { recursive: true });
     const fields2 = { ...cfg.statusline.fields, intro: false };
     (0, import_node_fs9.writeFileSync)((0, import_node_path9.join)(dir, "config.json"), serialize({ ...cfg, muted: true, statusline: { ...cfg.statusline, fields: fields2 } }));
-    const drawn = (0, import_node_child_process4.execFileSync)(process.execPath, [process.argv[1] ?? "", "fields", "preview-render"], {
+    const script = process.argv[1];
+    if (!script) throw new Error("tricorder: cannot preview, the path of this program is unknown");
+    const drawn = (0, import_node_child_process4.execFileSync)(process.execPath, [script, "fields", PREVIEW_RENDER], {
       env: { PATH: process.env.PATH ?? "", HOME: home, COLUMNS: PREVIEW_COLUMNS },
       encoding: "utf8",
       timeout: RENDER_TIMEOUT_MS
@@ -1330,8 +1340,12 @@ function buildQuestionCalls(fields2) {
 
 // src/fieldscmd.ts
 var ALL = "all";
-function parseType(arg, fallback) {
-  return arg === "subscription" || arg === "payg" || arg === "unknown" ? arg : fallback;
+function accountTypeFor(arg) {
+  if (arg === void 0) return resolveType(loadConfig().statusline.mode, detectAccount().type);
+  if (isDetectedType(arg)) return arg;
+  process.stderr.write("tricorder: unknown account type: " + arg + "\nvalid: " + DETECTED_TYPES.join(", ") + "\n");
+  process.exitCode = 1;
+  return null;
 }
 function detect() {
   const cfg = loadConfig();
@@ -1340,8 +1354,9 @@ function detect() {
   process.stdout.write(JSON.stringify({ ...detected, type, mode: cfg.statusline.mode }) + "\n");
 }
 function describeFields(typeArg) {
+  const type = accountTypeFor(typeArg);
+  if (type === null) return;
   const cfg = loadConfig();
-  const type = parseType(typeArg, resolveType(cfg.statusline.mode, detectAccount().type));
   const out = fieldsFor(type).map((f) => ({
     id: f.id,
     name: f.name,
@@ -1353,20 +1368,20 @@ function describeFields(typeArg) {
   process.stdout.write(serialize({ type, fields: out }));
 }
 function questionsFor(typeArg) {
-  const cfg = loadConfig();
-  const type = parseType(typeArg, resolveType(cfg.statusline.mode, detectAccount().type));
+  const type = accountTypeFor(typeArg);
+  if (type === null) return;
   const list = fieldsFor(type);
   const labels = Object.fromEntries(list.map((f) => [f.name, f.id]));
   process.stdout.write(serialize({ enableAllLabel: ENABLE_ALL_LABEL, labels, calls: buildQuestionCalls(list) }));
 }
 function parseFieldList(arg) {
   if (arg.trim().toLowerCase() === ALL) return { ids: FIELD_IDS, unknown: [] };
-  const parts = arg.split(",").map((p) => p.trim()).filter((p) => p !== "");
+  const parts = arg.split(",").map((p) => p.trim()).filter(Boolean);
   return { ids: parts.filter(isFieldId), unknown: parts.filter((p) => !isFieldId(p)) };
 }
 function setFields(arg) {
   const { ids, unknown } = parseFieldList(arg ?? "");
-  if (!!unknown.length) {
+  if (unknown.length) {
     process.stderr.write("tricorder: unknown field(s): " + unknown.join(", ") + "\nvalid: " + FIELD_IDS.join(", ") + "\n");
     process.exitCode = 1;
     return;
@@ -1376,18 +1391,26 @@ function setFields(arg) {
     return;
   }
   const cfg = loadConfig();
-  const fields2 = Object.fromEntries(FIELDS.map((f) => [f.id, ids.includes(f.id)]));
+  const fields2 = buildFields((id) => ids.includes(id));
   saveConfig({ ...cfg, statusline: { ...cfg.statusline, fields: fields2 } });
   log("fields set \u2192 " + ids.join(","));
   process.stdout.write("on: " + ids.join(", ") + "\n");
 }
+var SUBCOMMANDS = {
+  describe: describeFields,
+  questions: questionsFor,
+  preview: () => previewFields(),
+  [PREVIEW_RENDER]: () => renderPreviewSession(),
+  // internal: `preview` runs it in a throwaway home
+  set: setFields
+};
+var USAGE = "usage: tricorder fields describe [type] | fields questions [type] | fields preview | fields set <id,id,...|all>\n";
+function isSubCommand(name) {
+  return name !== void 0 && Object.hasOwn(SUBCOMMANDS, name);
+}
 function fields(sub, arg) {
-  if (sub === "describe") return describeFields(arg);
-  if (sub === "questions") return questionsFor(arg);
-  if (sub === "preview") return previewFields();
-  if (sub === "preview-render") return renderPreviewSession();
-  if (sub === "set") return setFields(arg);
-  process.stderr.write("usage: tricorder fields describe [type] | fields questions [type] | fields preview | fields set <id,id,...|all>\n");
+  if (isSubCommand(sub)) return SUBCOMMANDS[sub](arg);
+  process.stderr.write(USAGE);
   process.exitCode = 1;
 }
 
