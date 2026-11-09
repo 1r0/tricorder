@@ -10,12 +10,12 @@ const ACCOUNT_SUBSCRIPTION = "subscription";
 const ACCOUNT_FILE = ".claude.json";
 const PLAN_PRO = "claude_pro";
 const ACCOUNT_DIR_PREFIX = "tricorder-acct-";
+const DESCRIBE = "describe";
+const QUESTIONS = "questions";
 // Hand count for a subscription: 12 fields + "Enable all" = 13 options → 4, 4, 4, 1 → the single one borrows: 4, 4, 3, 2.
 // Pay per use has no 5h/7d fields but has spend: 11 fields + 1 = 12 options → 4, 4, 4.
 const SUBSCRIPTION = { fields: 12, optionCounts: [4, 4, 3, 2] } as const;
 const PAYG = { optionCounts: [4, 4, 4] } as const;
-const DESCRIBE = "describe";
-const QUESTIONS = "questions";
 
 // A session-less payload (no session_id) so nothing is written to the state
 // folder. The folder is not a git repo, so the location shows as "🌳 <name>".
@@ -47,6 +47,15 @@ test("statusline: with every line-1 field off nothing is printed", () => {
   const box = sandbox();
   writeConfig(box, { statusline: { fields: { location: false, context: false, model: false, muteIcon: false } } });
   assert.equal(statusline(box, project()), "");
+});
+
+test("fields: an unknown sub-command, even an inherited name like toString, prints usage and fails", () => {
+  const box = sandbox();
+  ["bogus", "toString"].forEach((name) => {
+    const r = run(box, ["fields", name]);
+    assert.equal(r.status, 1, name);
+    assert.ok(r.stderr.includes("usage: tricorder fields"), name);
+  });
 });
 
 test("fields set: exactly the listed fields are on, the rest are off", () => {
@@ -113,6 +122,16 @@ test("fields describe: lists fields with their explanation and on/off state", ()
   assert.equal(model.enabled, true);
   assert.notEqual(model.shows, "");
   assert.equal(out.fields.find((f: { id: string }) => f.id === "context").enabled, false);
+});
+
+test("fields describe/questions: an unknown account type fails instead of being guessed", () => {
+  const box = sandbox();
+  [DESCRIBE, QUESTIONS].forEach((sub) => {
+    const r = run(box, ["fields", sub, "subscripton"]);
+    assert.equal(r.status, 1, sub);
+    assert.ok(r.stderr.includes("unknown account type: subscripton"), sub);
+    assert.equal(r.stdout, "", sub);
+  });
 });
 
 test("fields questions: for a subscription gives 3 questions (4, 4, 3, 2 options) in one call", () => {

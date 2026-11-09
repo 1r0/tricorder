@@ -57,6 +57,7 @@ test("mergeConfig: an old config with no statusline block gets every default", (
 });
 
 test("mergeConfig: keeps valid switches, ignores unknown ids and non-booleans", () => {
+  // `as never`: the whole point is to feed values the types forbid, as a hand-edited config file would.
   const merged = mergeConfig(DEFAULT_CONFIG, {
     statusline: { fields: { context: false, model: "yes", bogus: true }, mode: "payg" },
   } as never);
@@ -78,6 +79,7 @@ test("mergeConfig: pace settings keep valid numbers; anything else keeps the def
 });
 
 test("mergeConfig: an invalid mode falls back to auto", () => {
+  // `as never`: feeds a value the types forbid, as a hand-edited config file would.
   const merged = mergeConfig(DEFAULT_CONFIG, { statusline: { fields: {}, mode: "gold" } } as never);
   assert.equal(merged.statusline.mode, "auto");
 });
