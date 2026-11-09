@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { PCT_MAX } from "./pace";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { readField } from "./account";
+import { MS_PER_S, PCT_MAX } from "./pace";
 
 // Spend for pay-per-use accounts: what this month has cost so far, counted in
 // US dollars, as an estimate. Claude Code only reports the cost of the session
@@ -15,7 +16,6 @@ import { PCT_MAX } from "./pace";
 // a test. The month is the calendar month in UTC (1st 00:00 UTC to the next 1st).
 
 const SECONDS_PER_DAY = 86_400;
-const MS_PER_S = 1000;
 const MONTH_KEY_DIGITS = 2;
 const FIRST_DAY = 1;
 const MONTH_INDEX_TO_NUMBER = 1; // January is 0 in a Date, month 1 in "2026-01"
@@ -54,6 +54,15 @@ export function monthElapsedPct(nowMs: number): number {
 interface CostRecord {
   readonly usd: number;
 }
+interface LastCostRecord {
+  readonly lastCostUsd: number;
+}
+type LedgerField = keyof CostRecord | keyof LastCostRecord;
+
+// Where a problem with a ledger file is reported (the statusline passes its log).
+// Left out in tests, which need no log. The module itself touches no log or global state.
+export type ReportProblem = (message: string) => void;
+const IGNORE_PROBLEM: ReportProblem = () => undefined;
 
 // Replaces everything but letters, digits and . _ - so a session id is safe as a file name:
 // "a/b c" becomes "a_b_c"; "abc-1.2" is unchanged.
@@ -61,19 +70,30 @@ interface CostRecord {
 const UNSAFE_FILE_CHARS = /[^A-Za-z0-9._-]/g;
 const sanitize = (id: string): string => id.replace(UNSAFE_FILE_CHARS, "_");
 
-// A number stored in one of the ledger files; `fallback` when the file is missing or unreadable.
-function readNumber(path: string, field: "usd" | "lastCostUsd", fallback: number): number {
+// A number stored in one of the ledger files. A file that does not exist yet is
+// normal and gives `fallback`. A file that exists but cannot be read gives
+// `fallback` too, but is reported: it makes the month's total too low, and the
+// user should be able to find out why.
+function readNumber(path: string, field: LedgerField, fallback: number, report: ReportProblem): number {
+  if (!existsSync(path)) return fallback;
   try {
-    const value = (JSON.parse(readFileSync(path, "utf8")) as Partial<Record<string, unknown>>)[field];
-    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-  } catch {
-    return fallback;
+    const value = readField(JSON.parse(readFileSync(path, "utf8")), field);
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    report("spend ledger: no usable " + field + " in " + path);
+  } catch (err) {
+    report("spend ledger: cannot read " + path + ": " + String(err));
   }
+  return fallback;
 }
 
+// Written to a temporary file and renamed, so a statusline redraw that reads at
+// the same moment sees the old file or the new one, never half of one.
+const TMP_SUFFIX = ".tmp";
 function writeJson(path: string, value: unknown): void {
-  mkdirSync(join(path, ".."), { recursive: true });
-  writeFileSync(path, JSON.stringify(value));
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = path + "." + process.pid + TMP_SUFFIX;
+  writeFileSync(tmp, JSON.stringify(value));
+  renameSync(tmp, path);
 }
 
 // Adds what a session has newly spent to this month's total.
@@ -83,25 +103,26 @@ function writeJson(path: string, value: unknown): void {
 //   again, so the whole new cost is the new part.
 // The new part goes to the month of `nowMs`, so a session that crosses midnight
 // of the 1st puts the later part in the new month.
-export function recordCost(dir: string, sessionId: string, costUsd: number, nowMs: number): void {
+export function recordCost(dir: string, sessionId: string, costUsd: number, nowMs: number, report: ReportProblem = IGNORE_PROBLEM): void {
   if (!Number.isFinite(costUsd) || costUsd < 0) return;
   const id = sanitize(sessionId);
   const lastPath = join(dir, LAST_COST_DIR, id + COST_FILE_EXT);
-  const last = readNumber(lastPath, "lastCostUsd", NO_COST);
+  const last = readNumber(lastPath, "lastCostUsd", NO_COST, report);
   if (costUsd === last) return;
   const added = costUsd >= last ? costUsd - last : costUsd;
   const monthPath = join(dir, monthKey(nowMs), id + COST_FILE_EXT);
-  const before = readNumber(monthPath, "usd", NO_COST);
+  const before = readNumber(monthPath, "usd", NO_COST, report);
   const record: CostRecord = { usd: before + added };
+  const lastRecord: LastCostRecord = { lastCostUsd: costUsd };
   writeJson(monthPath, record);
-  writeJson(lastPath, { lastCostUsd: costUsd });
+  writeJson(lastPath, lastRecord);
 }
 
 // Everything recorded for the month of `nowMs`, all sessions together.
-export function monthSpendUsd(dir: string, nowMs: number): number {
+export function monthSpendUsd(dir: string, nowMs: number, report: ReportProblem = IGNORE_PROBLEM): number {
   const monthDir = join(dir, monthKey(nowMs));
-  if (!existsSync(monthDir)) return 0;
+  if (!existsSync(monthDir)) return NO_COST;
   return readdirSync(monthDir)
     .filter((name) => name.endsWith(COST_FILE_EXT))
-    .reduce((sum, name) => sum + readNumber(join(monthDir, name), "usd", NO_COST), NO_COST);
+    .reduce((sum, name) => sum + readNumber(join(monthDir, name), "usd", NO_COST, report), NO_COST);
 }

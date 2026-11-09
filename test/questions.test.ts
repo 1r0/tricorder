@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildQuestionCalls, chunk, ENABLE_ALL_LABEL } from "../src/questions";
+import { buildQuestionCalls, chunk, ENABLE_ALL_LABEL, HEADER_MAX_CHARS } from "../src/questions";
 
 // n fields named F1..Fn
 function fields(n: number) {
@@ -21,7 +21,7 @@ const MAX_FIELDS_TRIED = 40;
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 4;
 const FIELDS_IN_ONE_CALL = 15; // 4 questions x 4 options = 16 slots, minus "Enable all"
-const HEADER_MAX = 12;
+const CALLS_FOR_16_FIELDS = 2; // 17 options = 5 questions: 4 fill the first call, the 5th starts a second
 const SAMPLE_PARTS = 3;
 
 LAYOUTS.forEach((layout) => {
@@ -46,14 +46,14 @@ test("15 fields + Enable all = 16 options fill exactly one call of 4 questions",
 });
 
 test("16 fields do not fit one call: a second call is made", () => {
-  assert.equal(buildQuestionCalls(fields(FIELDS_IN_ONE_CALL + 1)).length, MIN_OPTIONS);
+  assert.equal(buildQuestionCalls(fields(FIELDS_IN_ONE_CALL + 1)).length, CALLS_FOR_16_FIELDS);
 });
 
 test("every question has its own text and header (duplicates make the tool reject the call)", () => {
   const qs = buildQuestionCalls(fields(LAYOUTS[0].fields)).flat();
   assert.equal(new Set(qs.map((q) => q.question)).size, qs.length);
   assert.equal(new Set(qs.map((q) => q.header)).size, qs.length);
-  assert.ok(qs.every((q) => q.header.length <= HEADER_MAX && q.multiSelect));
+  assert.ok(qs.every((q) => q.header.length <= HEADER_MAX_CHARS && q.multiSelect));
   assert.ok((qs[0]?.question ?? "").includes(`part 1 of ${SAMPLE_PARTS}`));
 });
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { daysInMonth, monthElapsedPct, monthKey, monthSpendUsd, recordCost } from "../src/spend";
@@ -43,6 +43,10 @@ ELAPSED.forEach((e) => {
 // Each scenario: costs reported by sessions at moments, then the month total checked
 // at some moments. Costs are Claude Code's running cost of each session, in dollars.
 const NOV_10 = "2026-11-10T00:00:00Z";
+const NOV_10_MS = at(NOV_10);
+const LEDGER_PREFIX = "tricorder-spend-";
+const GOOD_FILE_USD = 2.5;
+const SESSION_COST_USD = 1.5;
 const SCENARIOS = [
   {
     name: "the same cost shown twice is counted once",
@@ -78,8 +82,32 @@ const SCENARIOS = [
 
 SCENARIOS.forEach((scenario) => {
   test(`ledger: ${scenario.name}`, () => {
-    const dir = mkdtempSync(join(tmpdir(), "tricorder-spend-"));
+    const dir = mkdtempSync(join(tmpdir(), LEDGER_PREFIX));
     scenario.steps.forEach((s) => recordCost(dir, s.session, s.cost, at(s.when)));
     scenario.totals.forEach((t) => assert.ok(Math.abs(monthSpendUsd(dir, at(t.when)) - t.usd) < EPSILON, `${t.when}`));
   });
+});
+
+// A damaged ledger file must not silently lower the total: it is reported (and
+// counted as $0). A file that simply does not exist yet is normal and silent.
+test("ledger: an unreadable file is reported, a missing one is not", () => {
+  const dir = mkdtempSync(join(tmpdir(), LEDGER_PREFIX));
+  const problems: string[] = [];
+  const report = (message: string): void => void problems.push(message);
+  assert.equal(monthSpendUsd(dir, NOV_10_MS, report), 0);
+  assert.equal(problems.length, 0);
+  const monthDir = join(dir, monthKey(NOV_10_MS));
+  mkdirSync(monthDir, { recursive: true });
+  writeFileSync(join(monthDir, "broken.json"), "{ not json");
+  writeFileSync(join(monthDir, "good.json"), JSON.stringify({ usd: GOOD_FILE_USD }));
+  assert.equal(monthSpendUsd(dir, NOV_10_MS, report), GOOD_FILE_USD);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0]?.includes("broken.json"));
+});
+
+test("ledger: writing leaves no temporary files behind", () => {
+  const dir = mkdtempSync(join(tmpdir(), LEDGER_PREFIX));
+  recordCost(dir, "s1", SESSION_COST_USD, NOV_10_MS);
+  const names = [join(monthKey(NOV_10_MS)), "last"].flatMap((d) => readdirSync(join(dir, d)));
+  assert.deepEqual(names, ["s1.json", "s1.json"]);
 });

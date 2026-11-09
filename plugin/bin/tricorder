@@ -13,177 +13,16 @@ function readStdin() {
 }
 
 // src/statusline.ts
-var import_node_path5 = require("node:path");
+var import_node_path6 = require("node:path");
 
 // src/config.ts
 var import_node_os = require("node:os");
-var import_node_path = require("node:path");
-var import_node_fs2 = require("node:fs");
+var import_node_path2 = require("node:path");
+var import_node_fs3 = require("node:fs");
 
-// src/fields.ts
-var SUBSCRIPTION = "subscription";
-var PAYG = "payg";
-var ACCOUNT_MODES = ["auto", "subscription", "payg"];
-function isAccountMode(value) {
-  return ACCOUNT_MODES.includes(value);
-}
-var EVERY_ACCOUNT = [SUBSCRIPTION, PAYG];
-var SUBSCRIPTION_ONLY = [SUBSCRIPTION];
-var PAYG_ONLY = [PAYG];
-var PACE_LEGEND = "The animal and the colour compare your use with the time gone in the window: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = limit reached. In the first 3% of a window it is too early to tell, so a \u{1F9A5} sloth (grey) shows instead. (Margin and 3% are settings: statusline.pace.)";
-var SPEND_LEGEND = "\u{1F4B0} = spend this month, in US dollars (calendar month, UTC). With a budget the animal and the colour compare the share of the budget spent with the share of the month gone: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = over budget (more than 100% spent), \u{1F9A5} grey = the first 3% of the month, too early to tell. The budget is not a limit. The figure is an estimate kept by tricorder: it misses sessions without a statusline, other machines and other tools using the same key.";
-var FIELDS = [
-  {
-    id: "muteIcon",
-    name: "Mute icon",
-    line: "main",
-    shows: "A speaker icon at the start of the line while sounds are muted.",
-    sample: "\u{1F507}",
-    legend: "\u{1F507} = sounds are muted.",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "location",
-    name: "Location",
-    line: "main",
-    shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
-    sample: "my-repo(main)   or   \u{1F333} fix-login",
-    legend: "Clicking opens the folder, copies the path, or both (see worktreeClick in the config).",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "dirty",
-    name: "Uncommitted changes",
-    line: "main",
-    shows: "A yellow * after the branch name when the folder has changes that are not committed yet (edited, staged or new files).",
-    sample: "my-repo(main*)   or   \u{1F333} fix-login*",
-    legend: "Yellow *. Nothing is shown for a folder that is not a git repository.",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "prs",
-    name: "Pull requests",
-    line: "main",
-    shows: "A clickable tag for each pull request this session opened from the current branch.",
-    sample: "(#12)",
-    legend: "Cyan.",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "context",
-    name: "Context window",
-    line: "main",
-    shows: "How full the model's context window is.",
-    sample: "\u{1F50B} 42%",
-    legend: "\u{1F50B} = context window. Green below 70%, yellow 70-89%, red from 90%.",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "model",
-    name: "Model",
-    line: "main",
-    shows: "The name of the model this session is using.",
-    sample: "Opus 5.5",
-    legend: "",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "usage5h",
-    name: "5-hour usage",
-    line: "main",
-    shows: "How much of your 5-hour usage limit you have used, and whether you are using it faster or slower than an even pace.",
-    sample: "5h \u{1F415} 37%",
-    legend: PACE_LEGEND,
-    appliesTo: SUBSCRIPTION_ONLY,
-    defaultOn: true
-  },
-  {
-    id: "usage7d",
-    name: "7-day usage",
-    line: "main",
-    shows: "How much of your 7-day usage limit you have used, and whether you are using it faster or slower than an even pace.",
-    sample: "7d \u{1F422} 12%",
-    legend: PACE_LEGEND,
-    appliesTo: SUBSCRIPTION_ONLY,
-    defaultOn: true
-  },
-  {
-    id: "spend",
-    name: "Monthly spend",
-    line: "main",
-    shows: "What you have spent this month on Claude usage (an estimate), and, if you set a monthly budget, how that compares with an even spread of the budget over the month.",
-    sample: "\u{1F4B0} $62/$200 \u{1F415} 31%   (no budget set: \u{1F4B0} $62)",
-    legend: SPEND_LEGEND,
-    appliesTo: PAYG_ONLY,
-    defaultOn: true
-  },
-  {
-    id: "plan",
-    name: "Plan link",
-    line: "main",
-    shows: "A link to the current plan file, at the right edge, once the session has one.",
-    sample: "\u{1F5FA}\uFE0F plan",
-    legend: "\u{1F5FA}\uFE0F = plan file. Grey text.",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "account",
-    name: "Account email",
-    line: "main",
-    shows: "The email you are signed in with, at the right edge of the first line, so you can tell your accounts apart. It also shows in screenshots and screen shares: switch it off if that matters.",
-    sample: "you@example.com",
-    legend: "Grey text. Read from Claude Code's own account file; nothing is shown if it cannot be found.",
-    appliesTo: SUBSCRIPTION_ONLY,
-    defaultOn: true
-  },
-  {
-    id: "worktrees",
-    name: "Other worktrees",
-    line: "worktrees",
-    shows: "A second line listing the other worktrees this session has visited, each with its pull requests.",
-    sample: "fix-login (#12)  add-tests",
-    legend: "",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "subagents",
-    name: "Sub-agents",
-    line: "subagents",
-    shows: "A line listing the sub-agents running right now, with the model each one uses.",
-    sample: "\u{1F916} Explore Opus 4.8, review Sonnet 5",
-    legend: "\u{1F916} = sub-agents. Model names in grey.",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  },
-  {
-    id: "intro",
-    name: "Start-up animation",
-    line: "intro",
-    shows: "A small ship that crosses the line for the first 4 seconds of a session.",
-    sample: "o\u2261\u2261\u2261>",
-    legend: "Cyan.",
-    appliesTo: EVERY_ACCOUNT,
-    defaultOn: true
-  }
-];
-var FIELD_IDS = FIELDS.map((f) => f.id);
-function isFieldId(value) {
-  return FIELD_IDS.includes(value);
-}
-function defaultFields() {
-  return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn]));
-}
-function fieldsFor(type) {
-  return FIELDS.filter((f) => type === "unknown" || f.appliesTo.includes(type));
-}
+// src/account.ts
+var import_node_fs2 = require("node:fs");
+var import_node_path = require("node:path");
 
 // src/pace.ts
 var PACE_STYLES = {
@@ -204,9 +43,13 @@ var DEFAULT_PACE = { marginPts: 10, minElapsedPct: 3 };
 var FIVE_HOUR_WINDOW_S = 18e3;
 var SEVEN_DAY_WINDOW_S = 604800;
 var PCT_MAX = 100;
+var MS_PER_S = 1e3;
 var WATCH_OUT_MARGINS = 2;
-function elapsedPct(resetsAtS, nowS, windowS) {
-  return (1 - (resetsAtS - nowS) / windowS) * PCT_MAX;
+function elapsedPct(resetsAtS2, nowS, windowS) {
+  return (1 - (resetsAtS2 - nowS) / windowS) * PCT_MAX;
+}
+function resetsAtS(elapsedPctGone, nowS, windowS) {
+  return nowS + (1 - elapsedPctGone / PCT_MAX) * windowS;
 }
 function bandForDeviation(deviationPts, marginPts) {
   if (deviationPts < -marginPts) return "chill";
@@ -226,17 +69,227 @@ function limitBand(usedPct, elapsed, cfg) {
   return usedPct >= PCT_MAX ? "over" : paceBand(usedPct, elapsed, cfg);
 }
 
+// src/fields.ts
+var SUBSCRIPTION = "subscription";
+var PAYG = "payg";
+var UNKNOWN = "unknown";
+var AUTO = "auto";
+var ACCOUNT_TYPES = [SUBSCRIPTION, PAYG];
+var DETECTED_TYPES = [...ACCOUNT_TYPES, UNKNOWN];
+var ACCOUNT_MODES = [AUTO, ...ACCOUNT_TYPES];
+function isAccountMode(value) {
+  return ACCOUNT_MODES.includes(value);
+}
+function isDetectedType(value) {
+  return DETECTED_TYPES.includes(value);
+}
+var EVERY_ACCOUNT = ACCOUNT_TYPES;
+var SUBSCRIPTION_ONLY = [SUBSCRIPTION];
+var PAYG_ONLY = [PAYG];
+var EARLY_PCT = DEFAULT_PACE.minElapsedPct;
+var PACE_LEGEND = `The animal and the colour compare your use with the time gone in the window: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = limit reached. In the first ${EARLY_PCT}% of a window it is too early to tell, so a \u{1F9A5} sloth (grey) shows instead. (Margin and ${EARLY_PCT}% are settings: statusline.pace.)`;
+var SPEND_LEGEND = `\u{1F4B0} = spend this month, in US dollars (calendar month, UTC). With a budget the animal and the colour compare the share of the budget spent with the share of the month gone: \u{1F422} green = well under an even pace, \u{1F415} blue = on pace, \u{1F40E} orange = a little fast, \u{1F985} red = too fast, \u{1F409} magenta = over budget (more than 100% spent), \u{1F9A5} grey = the first ${EARLY_PCT}% of the month, too early to tell. The budget is not a limit. The figure is an estimate kept by tricorder: it misses sessions without a statusline, other machines and other tools using the same key.`;
+var FIELDS = [
+  {
+    id: "muteIcon",
+    name: "Mute icon",
+    shows: "A speaker icon at the start of the line while sounds are muted.",
+    sample: "\u{1F507}",
+    legend: "\u{1F507} = sounds are muted.",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "location",
+    name: "Location",
+    shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
+    sample: "my-repo(main)   or   \u{1F333} fix-login",
+    legend: "Clicking opens the folder, copies the path, or both (see worktreeClick in the config).",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "dirty",
+    name: "Uncommitted changes",
+    shows: "A yellow * after the branch name when the folder has changes that are not committed yet (edited, staged or new files).",
+    sample: "my-repo(main*)   or   \u{1F333} fix-login*",
+    legend: "Yellow *. Nothing is shown for a folder that is not a git repository.",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "prs",
+    name: "Pull requests",
+    shows: "A clickable tag for each pull request this session opened from the current branch.",
+    sample: "(#12)",
+    legend: "Cyan.",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "context",
+    name: "Context window",
+    shows: "How full the model's context window is.",
+    sample: "\u{1F50B} 42%",
+    legend: "\u{1F50B} = context window. Green below 70%, yellow 70-89%, red from 90%.",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "model",
+    name: "Model",
+    shows: "The name of the model this session is using.",
+    sample: "Opus 5.5",
+    legend: "",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "usage5h",
+    name: "5-hour usage",
+    shows: "How much of your 5-hour usage limit you have used, and whether you are using it faster or slower than an even pace.",
+    sample: "5h \u{1F415} 37%",
+    legend: PACE_LEGEND,
+    appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true
+  },
+  {
+    id: "usage7d",
+    name: "7-day usage",
+    shows: "How much of your 7-day usage limit you have used, and whether you are using it faster or slower than an even pace.",
+    sample: "7d \u{1F422} 12%",
+    legend: PACE_LEGEND,
+    appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true
+  },
+  {
+    id: "spend",
+    name: "Monthly spend",
+    shows: "What you have spent this month on Claude usage (an estimate), and, if you set a monthly budget, how that compares with an even spread of the budget over the month.",
+    sample: "\u{1F4B0} $62/$200 \u{1F415} 31%   (no budget set: \u{1F4B0} $62)",
+    legend: SPEND_LEGEND,
+    appliesTo: PAYG_ONLY,
+    defaultOn: true
+  },
+  {
+    id: "plan",
+    name: "Plan link",
+    shows: "A link to the current plan file, at the right edge, once the session has one.",
+    sample: "\u{1F5FA}\uFE0F plan",
+    legend: "\u{1F5FA}\uFE0F = plan file. Grey text.",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "account",
+    name: "Account email",
+    shows: "The email you are signed in with, at the right edge of the first line, so you can tell your accounts apart. It also shows in screenshots and screen shares: switch it off if that matters.",
+    sample: "you@example.com",
+    legend: "Grey text. Read from Claude Code's own account file; nothing is shown if it cannot be found.",
+    appliesTo: SUBSCRIPTION_ONLY,
+    defaultOn: true
+  },
+  {
+    id: "worktrees",
+    name: "Other worktrees",
+    shows: "A second line listing the other worktrees this session has visited, each with its pull requests.",
+    sample: "fix-login (#12)  add-tests",
+    legend: "",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "subagents",
+    name: "Sub-agents",
+    shows: "A line listing the sub-agents running right now, with the model each one uses.",
+    sample: "\u{1F916} Explore Opus 4.8, review Sonnet 5",
+    legend: "\u{1F916} = sub-agents. Model names in grey.",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  },
+  {
+    id: "intro",
+    name: "Start-up animation",
+    shows: "A small ship that crosses the line for the first 4 seconds of a session.",
+    sample: "o\u2261\u2261\u2261>",
+    legend: "Cyan.",
+    appliesTo: EVERY_ACCOUNT,
+    defaultOn: true
+  }
+];
+var FIELD_IDS = FIELDS.map((f) => f.id);
+function isFieldId(value) {
+  return FIELD_IDS.includes(value);
+}
+function buildFields(valueFor) {
+  return Object.fromEntries(FIELD_IDS.map((id) => [id, valueFor(id)]));
+}
+function defaultFields() {
+  return buildFields((id) => FIELDS.some((f) => f.id === id && f.defaultOn));
+}
+function fieldsFor(type) {
+  return FIELDS.filter((f) => type === UNKNOWN || f.appliesTo.includes(type));
+}
+
+// src/account.ts
+var UNKNOWN_ACCOUNT = { type: UNKNOWN, plan: null, extraUsage: false };
+function readField(value, key) {
+  return typeof value === "object" && value !== null && key in value ? value[key] : void 0;
+}
+function classify(parsed) {
+  if (typeof parsed !== "object" || parsed === null) return UNKNOWN_ACCOUNT;
+  const oauth = readField(parsed, "oauthAccount");
+  if (typeof oauth !== "object" || oauth === null) return { type: PAYG, plan: null, extraUsage: false };
+  const plan = readField(oauth, "organizationType");
+  return {
+    type: SUBSCRIPTION,
+    plan: typeof plan === "string" ? plan : null,
+    extraUsage: readField(oauth, "hasExtraUsageEnabled") === true
+  };
+}
+function accountFilePath() {
+  const dir = process.env.CLAUDE_CONFIG_DIR;
+  if (dir) return (0, import_node_path.join)(dir, ".claude.json");
+  const home = process.env.HOME;
+  return home ? (0, import_node_path.join)(home, ".claude.json") : null;
+}
+var accountFile;
+function readAccountFile() {
+  if (accountFile === void 0) {
+    const file = accountFilePath();
+    try {
+      accountFile = { parsed: file === null ? null : JSON.parse((0, import_node_fs2.readFileSync)(file, "utf8")) };
+    } catch {
+      accountFile = { parsed: null };
+    }
+  }
+  return accountFile.parsed;
+}
+function detectAccount() {
+  return classify(readAccountFile());
+}
+function emailOf(parsed) {
+  const email = readField(readField(parsed, "oauthAccount"), "emailAddress");
+  return typeof email === "string" && email ? email : null;
+}
+function readAccountEmail() {
+  return emailOf(readAccountFile());
+}
+function resolveType(mode, detected) {
+  return mode === AUTO ? detected : mode;
+}
+
 // src/config.ts
 var JSON_INDENT = 2;
-var DATA_DIR = (0, import_node_path.join)((0, import_node_os.homedir)(), ".claude", "tricorder");
-var CONFIG_PATH = (0, import_node_path.join)(DATA_DIR, "config.json");
-var STATE_DIR = (0, import_node_path.join)(DATA_DIR, "state");
-var SOUNDS_DIR = (0, import_node_path.join)(DATA_DIR, "sounds");
-var SPEND_DIR = (0, import_node_path.join)(DATA_DIR, "spend");
-var QUESTION_SOUND = (0, import_node_path.join)(SOUNDS_DIR, "please-specify.mp3");
-var PERMISSION_SOUND = (0, import_node_path.join)(SOUNDS_DIR, "security-authorisation.mp3");
-var STOP_SOUND = (0, import_node_path.join)(SOUNDS_DIR, "transporter-complete.mp3");
-var PLAN_SOUND = (0, import_node_path.join)(SOUNDS_DIR, "engage.mp3");
+var DATA_DIR = (0, import_node_path2.join)((0, import_node_os.homedir)(), ".claude", "tricorder");
+var CONFIG_PATH = (0, import_node_path2.join)(DATA_DIR, "config.json");
+var STATE_DIR = (0, import_node_path2.join)(DATA_DIR, "state");
+var SOUNDS_DIR = (0, import_node_path2.join)(DATA_DIR, "sounds");
+var SPEND_DIR = (0, import_node_path2.join)(DATA_DIR, "spend");
+var QUESTION_SOUND = (0, import_node_path2.join)(SOUNDS_DIR, "please-specify.mp3");
+var PERMISSION_SOUND = (0, import_node_path2.join)(SOUNDS_DIR, "security-authorisation.mp3");
+var STOP_SOUND = (0, import_node_path2.join)(SOUNDS_DIR, "transporter-complete.mp3");
+var PLAN_SOUND = (0, import_node_path2.join)(SOUNDS_DIR, "engage.mp3");
 var WORKTREE_CLICK_MODES = ["open", "copy", "both"];
 function isWorktreeClickMode(value) {
   return WORKTREE_CLICK_MODES.includes(value);
@@ -246,7 +299,7 @@ var DEFAULT_CONFIG = {
   muted: true,
   worktreeClick: "open",
   // Every field on, so nothing changes for an existing user until they choose.
-  statusline: { fields: defaultFields(), mode: "auto", pace: DEFAULT_PACE, budget: { monthlyUsd: null } },
+  statusline: { fields: defaultFields(), mode: AUTO, pace: DEFAULT_PACE, budget: { monthlyUsd: null } },
   sounds: {
     // "Please specify how you would like to proceed" — plays when Claude waits
     // on you (Notification / AskUserQuestion).
@@ -263,19 +316,19 @@ var DEFAULT_CONFIG = {
   }
 };
 function ensureDir(dir) {
-  (0, import_node_fs2.mkdirSync)(dir, { recursive: true });
+  (0, import_node_fs3.mkdirSync)(dir, { recursive: true });
 }
 function serialize(value) {
   return JSON.stringify(value, null, JSON_INDENT) + "\n";
 }
 function loadConfig() {
   ensureDir(DATA_DIR);
-  if (!(0, import_node_fs2.existsSync)(CONFIG_PATH)) {
-    (0, import_node_fs2.writeFileSync)(CONFIG_PATH, serialize(DEFAULT_CONFIG));
+  if (!(0, import_node_fs3.existsSync)(CONFIG_PATH)) {
+    (0, import_node_fs3.writeFileSync)(CONFIG_PATH, serialize(DEFAULT_CONFIG));
     return structuredClone(DEFAULT_CONFIG);
   }
   try {
-    const raw = JSON.parse((0, import_node_fs2.readFileSync)(CONFIG_PATH, "utf8"));
+    const raw = JSON.parse((0, import_node_fs3.readFileSync)(CONFIG_PATH, "utf8"));
     return mergeConfig(DEFAULT_CONFIG, raw);
   } catch {
     return structuredClone(DEFAULT_CONFIG);
@@ -284,21 +337,23 @@ function loadConfig() {
 var isPositive = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
 var isShareBelowMax = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v < PCT_MAX;
 function mergePace(base, given) {
-  const g = typeof given === "object" && given !== null ? given : {};
+  const marginPts = readField(given, "marginPts");
+  const minElapsedPct = readField(given, "minElapsedPct");
   return {
-    marginPts: isPositive(g.marginPts) ? g.marginPts : base.marginPts,
-    minElapsedPct: isShareBelowMax(g.minElapsedPct) ? g.minElapsedPct : base.minElapsedPct
+    marginPts: isPositive(marginPts) ? marginPts : base.marginPts,
+    minElapsedPct: isShareBelowMax(minElapsedPct) ? minElapsedPct : base.minElapsedPct
   };
 }
 function mergeBudget(given) {
-  const value = given?.monthlyUsd;
+  const value = readField(given, "monthlyUsd");
   return { monthlyUsd: isPositive(value) ? value : null };
 }
 function mergeStatusline(base, override) {
   const given = override?.fields;
-  const fields2 = Object.fromEntries(
-    FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]])
-  );
+  const fields2 = buildFields((id) => {
+    const value = given?.[id];
+    return typeof value === "boolean" ? value : base.fields[id];
+  });
   return { fields: fields2, mode: isAccountMode(override?.mode) ? override.mode : base.mode, pace: mergePace(base.pace, override?.pace), budget: mergeBudget(override?.budget) };
 }
 function mergeConfig(base, override) {
@@ -318,12 +373,12 @@ function mergeConfig(base, override) {
 }
 function saveConfig(cfg) {
   ensureDir(DATA_DIR);
-  (0, import_node_fs2.writeFileSync)(CONFIG_PATH, serialize(cfg));
+  (0, import_node_fs3.writeFileSync)(CONFIG_PATH, serialize(cfg));
 }
 
 // src/state.ts
-var import_node_path2 = require("node:path");
-var import_node_fs3 = require("node:fs");
+var import_node_path3 = require("node:path");
+var import_node_fs4 = require("node:fs");
 var JSON_EXT = ".json";
 var PRS_FILE = "prs.json";
 var WORKTREES_FILE = "worktrees.json";
@@ -335,20 +390,20 @@ function sanitize(value) {
   return value.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 function sessionDir(sessionId) {
-  return (0, import_node_path2.join)(STATE_DIR, sanitize(sessionId));
+  return (0, import_node_path3.join)(STATE_DIR, sanitize(sessionId));
 }
 function subagentsDir(sessionId) {
-  return (0, import_node_path2.join)(sessionDir(sessionId), SUBAGENTS_DIR);
+  return (0, import_node_path3.join)(sessionDir(sessionId), SUBAGENTS_DIR);
 }
 function readJSON(path, fallback) {
   try {
-    return JSON.parse((0, import_node_fs3.readFileSync)(path, "utf8"));
+    return JSON.parse((0, import_node_fs4.readFileSync)(path, "utf8"));
   } catch {
     return fallback;
   }
 }
 function readPRs(sessionId) {
-  return readJSON((0, import_node_path2.join)(sessionDir(sessionId), PRS_FILE), []);
+  return readJSON((0, import_node_path3.join)(sessionDir(sessionId), PRS_FILE), []);
 }
 function addPR(sessionId, pr) {
   const dir = sessionDir(sessionId);
@@ -358,44 +413,44 @@ function addPR(sessionId, pr) {
     (p) => p.url === pr.url || pr.number !== null && p.number === pr.number
   );
   if (already) return;
-  (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, PRS_FILE), serialize([...prs, pr]));
+  (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, PRS_FILE), serialize([...prs, pr]));
 }
 function prsForBranch(sessionId, branch) {
   return readPRs(sessionId).filter((p) => p.branch === branch);
 }
 function readWorktrees(sessionId) {
-  return readJSON((0, import_node_path2.join)(sessionDir(sessionId), WORKTREES_FILE), []);
+  return readJSON((0, import_node_path3.join)(sessionDir(sessionId), WORKTREES_FILE), []);
 }
 function addWorktree(sessionId, ref) {
   const dir = sessionDir(sessionId);
   ensureDir(dir);
   const rest = readWorktrees(sessionId).filter((w) => w.branch !== ref.branch);
-  (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, WORKTREES_FILE), serialize([...rest, ref].slice(-MAX_WORKTREES)));
+  (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, WORKTREES_FILE), serialize([...rest, ref].slice(-MAX_WORKTREES)));
 }
 function addSubagent(sessionId, id, data) {
   const dir = subagentsDir(sessionId);
   ensureDir(dir);
-  (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, sanitize(id) + JSON_EXT), serialize(data));
+  (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, sanitize(id) + JSON_EXT), serialize(data));
 }
 function removeSubagent(sessionId, id) {
   try {
-    (0, import_node_fs3.rmSync)((0, import_node_path2.join)(subagentsDir(sessionId), sanitize(id) + JSON_EXT), { force: true });
+    (0, import_node_fs4.rmSync)((0, import_node_path3.join)(subagentsDir(sessionId), sanitize(id) + JSON_EXT), { force: true });
   } catch {
   }
 }
 function listSubagents(sessionId) {
   const dir = subagentsDir(sessionId);
-  if (!(0, import_node_fs3.existsSync)(dir)) return [];
-  return (0, import_node_fs3.readdirSync)(dir).filter((f) => f.endsWith(JSON_EXT)).map((f) => readJSON((0, import_node_path2.join)(dir, f), null)).filter((s) => s !== null).sort((a, b) => a.startedAt - b.startedAt);
+  if (!(0, import_node_fs4.existsSync)(dir)) return [];
+  return (0, import_node_fs4.readdirSync)(dir).filter((f) => f.endsWith(JSON_EXT)).map((f) => readJSON((0, import_node_path3.join)(dir, f), null)).filter((s) => s !== null).sort((a, b) => a.startedAt - b.startedAt);
 }
 function setPlan(sessionId, planPath) {
   const dir = sessionDir(sessionId);
   ensureDir(dir);
-  (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, PLAN_FILE), planPath + "\n");
+  (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, PLAN_FILE), planPath + "\n");
 }
 function getPlan(sessionId) {
   try {
-    return (0, import_node_fs3.readFileSync)((0, import_node_path2.join)(sessionDir(sessionId), PLAN_FILE), "utf8").trim() || null;
+    return (0, import_node_fs4.readFileSync)((0, import_node_path3.join)(sessionDir(sessionId), PLAN_FILE), "utf8").trim() || null;
   } catch {
     return null;
   }
@@ -403,11 +458,11 @@ function getPlan(sessionId) {
 function setModel(sessionId, model) {
   const dir = sessionDir(sessionId);
   ensureDir(dir);
-  (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, MODEL_FILE), model + "\n");
+  (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, MODEL_FILE), model + "\n");
 }
 function getModel(sessionId) {
   try {
-    return (0, import_node_fs3.readFileSync)((0, import_node_path2.join)(sessionDir(sessionId), MODEL_FILE), "utf8").trim() || null;
+    return (0, import_node_fs4.readFileSync)((0, import_node_path3.join)(sessionDir(sessionId), MODEL_FILE), "utf8").trim() || null;
   } catch {
     return null;
   }
@@ -416,11 +471,11 @@ var SOUND_AT_FILE = "sound-at.txt";
 function setLastSound(sessionId) {
   const dir = sessionDir(sessionId);
   ensureDir(dir);
-  (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, SOUND_AT_FILE), String(Date.now()));
+  (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, SOUND_AT_FILE), String(Date.now()));
 }
 function getLastSound(sessionId) {
   try {
-    const raw = Number((0, import_node_fs3.readFileSync)((0, import_node_path2.join)(sessionDir(sessionId), SOUND_AT_FILE), "utf8").trim());
+    const raw = Number((0, import_node_fs4.readFileSync)((0, import_node_path3.join)(sessionDir(sessionId), SOUND_AT_FILE), "utf8").trim());
     return Number.isFinite(raw) ? raw : null;
   } catch {
     return null;
@@ -434,11 +489,11 @@ var DEBUG_DIR = "_debug";
 function writeText(sessionId, file, value) {
   const dir = sessionDir(sessionId);
   ensureDir(dir);
-  (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, file), value + "\n");
+  (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, file), value + "\n");
 }
 function readText(sessionId, file) {
   try {
-    return (0, import_node_fs3.readFileSync)((0, import_node_path2.join)(sessionDir(sessionId), file), "utf8").trim() || null;
+    return (0, import_node_fs4.readFileSync)((0, import_node_path3.join)(sessionDir(sessionId), file), "utf8").trim() || null;
   } catch {
     return null;
   }
@@ -446,10 +501,10 @@ function readText(sessionId, file) {
 function setAttention(sessionId, state) {
   const dir = sessionDir(sessionId);
   ensureDir(dir);
-  (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, ATTENTION_FILE), serialize({ state, at: Date.now() }));
+  (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, ATTENTION_FILE), serialize({ state, at: Date.now() }));
 }
 function getAttention(sessionId) {
-  return readJSON((0, import_node_path2.join)(sessionDir(sessionId), ATTENTION_FILE), null);
+  return readJSON((0, import_node_path3.join)(sessionDir(sessionId), ATTENTION_FILE), null);
 }
 function setLabel(sessionId, label) {
   writeText(sessionId, LABEL_FILE, label);
@@ -458,7 +513,7 @@ function getLabel(sessionId) {
   return readText(sessionId, LABEL_FILE);
 }
 function setLabelIfAbsent(sessionId, label) {
-  if ((0, import_node_fs3.existsSync)((0, import_node_path2.join)(sessionDir(sessionId), LABEL_FILE))) return;
+  if ((0, import_node_fs4.existsSync)((0, import_node_path3.join)(sessionDir(sessionId), LABEL_FILE))) return;
   writeText(sessionId, LABEL_FILE, label);
 }
 function setItermId(sessionId, id) {
@@ -472,88 +527,40 @@ function setCwd(sessionId, cwd) {
 }
 function removeSession(sessionId) {
   try {
-    (0, import_node_fs3.rmSync)(sessionDir(sessionId), { recursive: true, force: true });
+    (0, import_node_fs4.rmSync)(sessionDir(sessionId), { recursive: true, force: true });
   } catch {
   }
 }
 function listSessions() {
   try {
-    return (0, import_node_fs3.readdirSync)(STATE_DIR, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== DEBUG_DIR).map((e) => e.name);
+    return (0, import_node_fs4.readdirSync)(STATE_DIR, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== DEBUG_DIR).map((e) => e.name);
   } catch {
     return [];
   }
 }
 var INTRO_FILE = "intro.txt";
 function introElapsed(sessionId) {
-  const path = (0, import_node_path2.join)(sessionDir(sessionId), INTRO_FILE);
+  const path = (0, import_node_path3.join)(sessionDir(sessionId), INTRO_FILE);
   try {
-    const started = Number((0, import_node_fs3.readFileSync)(path, "utf8").trim());
+    const started = Number((0, import_node_fs4.readFileSync)(path, "utf8").trim());
     if (Number.isFinite(started)) return Date.now() - started;
   } catch {
   }
   const dir = sessionDir(sessionId);
   ensureDir(dir);
   try {
-    (0, import_node_fs3.writeFileSync)(path, String(Date.now()));
+    (0, import_node_fs4.writeFileSync)(path, String(Date.now()));
   } catch {
   }
   return 0;
 }
 function debugDump(name, raw) {
   try {
-    const dir = (0, import_node_path2.join)(STATE_DIR, "_debug");
+    const dir = (0, import_node_path3.join)(STATE_DIR, "_debug");
     ensureDir(dir);
-    (0, import_node_fs3.writeFileSync)((0, import_node_path2.join)(dir, name + JSON_EXT), raw);
+    (0, import_node_fs4.writeFileSync)((0, import_node_path3.join)(dir, name + JSON_EXT), raw);
   } catch {
   }
-}
-
-// src/account.ts
-var import_node_fs4 = require("node:fs");
-var import_node_path3 = require("node:path");
-var UNKNOWN_ACCOUNT = { type: "unknown", plan: null, extraUsage: false };
-function classify(parsed) {
-  if (typeof parsed !== "object" || parsed === null) return UNKNOWN_ACCOUNT;
-  const oauth = parsed.oauthAccount;
-  if (typeof oauth !== "object" || oauth === null) return { type: "payg", plan: null, extraUsage: false };
-  const account = oauth;
-  return {
-    type: "subscription",
-    plan: typeof account.organizationType === "string" ? account.organizationType : null,
-    extraUsage: account.hasExtraUsageEnabled === true
-  };
-}
-function accountFilePath() {
-  const dir = process.env.CLAUDE_CONFIG_DIR;
-  if (dir !== void 0 && dir !== "") return (0, import_node_path3.join)(dir, ".claude.json");
-  const home = process.env.HOME;
-  return home === void 0 || home === "" ? null : (0, import_node_path3.join)(home, ".claude.json");
-}
-var accountFile;
-function readAccountFile() {
-  if (accountFile === void 0) {
-    const file = accountFilePath();
-    try {
-      accountFile = { parsed: file === null ? null : JSON.parse((0, import_node_fs4.readFileSync)(file, "utf8")) };
-    } catch {
-      accountFile = { parsed: null };
-    }
-  }
-  return accountFile.parsed;
-}
-function detectAccount() {
-  return classify(readAccountFile());
-}
-function emailOf(parsed) {
-  const oauth = parsed?.oauthAccount;
-  const email = oauth?.emailAddress;
-  return typeof email === "string" && email !== "" ? email : null;
-}
-function readAccountEmail() {
-  return emailOf(readAccountFile());
-}
-function resolveType(mode, detected) {
-  return mode === "auto" ? detected : mode;
 }
 
 // src/git.ts
@@ -601,7 +608,7 @@ function currentBranch(cwd) {
 }
 function isDirty(cwd) {
   const out = run(["status", "--porcelain"], cwd);
-  return out === null ? null : out.trim() !== "";
+  return out === null ? null : Boolean(out.trim());
 }
 var EMPTY_STATE = { entries: [], path: null, branch: null, bare: false };
 function flush(state) {
@@ -624,9 +631,48 @@ function worktreeList(cwd) {
   return flush(out.split("\n").reduce(parseLine, EMPTY_STATE)).entries;
 }
 
-// src/spend.ts
+// src/log.ts
 var import_node_fs5 = require("node:fs");
 var import_node_path4 = require("node:path");
+var LOG_PATH = (0, import_node_path4.join)(DATA_DIR, "tricorder.log");
+var TAIL_DEFAULT = 40;
+var MAX_LOG_BYTES = 524288;
+var KEEP_LINES = 2e3;
+function stamp() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+function log(line) {
+  try {
+    ensureDir(DATA_DIR);
+    if ((0, import_node_fs5.existsSync)(LOG_PATH) && (0, import_node_fs5.statSync)(LOG_PATH).size > MAX_LOG_BYTES) {
+      const kept = (0, import_node_fs5.readFileSync)(LOG_PATH, "utf8").split("\n").slice(-KEEP_LINES).join("\n");
+      (0, import_node_fs5.writeFileSync)(LOG_PATH, kept);
+    }
+    (0, import_node_fs5.appendFileSync)(LOG_PATH, stamp() + " " + line + "\n");
+  } catch {
+  }
+}
+function showLogs(arg) {
+  if (arg === "clear") {
+    try {
+      (0, import_node_fs5.writeFileSync)(LOG_PATH, "");
+    } catch {
+    }
+    process.stdout.write("cleared " + LOG_PATH + "\n");
+    return;
+  }
+  const n = Number(arg) || TAIL_DEFAULT;
+  try {
+    const lines = (0, import_node_fs5.readFileSync)(LOG_PATH, "utf8").split("\n").filter((l) => l !== "");
+    process.stdout.write(lines.slice(-n).join("\n") + "\n");
+  } catch {
+    process.stdout.write("(no log yet at " + LOG_PATH + ")\n");
+  }
+}
+
+// src/spend.ts
+var import_node_fs6 = require("node:fs");
+var import_node_path5 = require("node:path");
 var MONTH_KEY_DIGITS = 2;
 var FIRST_DAY = 1;
 var MONTH_INDEX_TO_NUMBER = 1;
@@ -648,37 +694,45 @@ var nextMonthStartMs = (nowMs) => {
 function monthElapsedPct(nowMs) {
   return (nowMs - monthStartMs(nowMs)) / (nextMonthStartMs(nowMs) - monthStartMs(nowMs)) * PCT_MAX;
 }
+var IGNORE_PROBLEM = () => void 0;
 var UNSAFE_FILE_CHARS = /[^A-Za-z0-9._-]/g;
 var sanitize2 = (id) => id.replace(UNSAFE_FILE_CHARS, "_");
-function readNumber(path, field, fallback) {
+function readNumber(path, field, fallback, report) {
+  if (!(0, import_node_fs6.existsSync)(path)) return fallback;
   try {
-    const value = JSON.parse((0, import_node_fs5.readFileSync)(path, "utf8"))[field];
-    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-  } catch {
-    return fallback;
+    const value = readField(JSON.parse((0, import_node_fs6.readFileSync)(path, "utf8")), field);
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    report("spend ledger: no usable " + field + " in " + path);
+  } catch (err) {
+    report("spend ledger: cannot read " + path + ": " + String(err));
   }
+  return fallback;
 }
+var TMP_SUFFIX = ".tmp";
 function writeJson(path, value) {
-  (0, import_node_fs5.mkdirSync)((0, import_node_path4.join)(path, ".."), { recursive: true });
-  (0, import_node_fs5.writeFileSync)(path, JSON.stringify(value));
+  (0, import_node_fs6.mkdirSync)((0, import_node_path5.dirname)(path), { recursive: true });
+  const tmp = path + "." + process.pid + TMP_SUFFIX;
+  (0, import_node_fs6.writeFileSync)(tmp, JSON.stringify(value));
+  (0, import_node_fs6.renameSync)(tmp, path);
 }
-function recordCost(dir, sessionId, costUsd, nowMs) {
+function recordCost(dir, sessionId, costUsd, nowMs, report = IGNORE_PROBLEM) {
   if (!Number.isFinite(costUsd) || costUsd < 0) return;
   const id = sanitize2(sessionId);
-  const lastPath = (0, import_node_path4.join)(dir, LAST_COST_DIR, id + COST_FILE_EXT);
-  const last = readNumber(lastPath, "lastCostUsd", NO_COST);
+  const lastPath = (0, import_node_path5.join)(dir, LAST_COST_DIR, id + COST_FILE_EXT);
+  const last = readNumber(lastPath, "lastCostUsd", NO_COST, report);
   if (costUsd === last) return;
   const added = costUsd >= last ? costUsd - last : costUsd;
-  const monthPath = (0, import_node_path4.join)(dir, monthKey(nowMs), id + COST_FILE_EXT);
-  const before = readNumber(monthPath, "usd", NO_COST);
+  const monthPath = (0, import_node_path5.join)(dir, monthKey(nowMs), id + COST_FILE_EXT);
+  const before = readNumber(monthPath, "usd", NO_COST, report);
   const record = { usd: before + added };
+  const lastRecord = { lastCostUsd: costUsd };
   writeJson(monthPath, record);
-  writeJson(lastPath, { lastCostUsd: costUsd });
+  writeJson(lastPath, lastRecord);
 }
-function monthSpendUsd(dir, nowMs) {
-  const monthDir = (0, import_node_path4.join)(dir, monthKey(nowMs));
-  if (!(0, import_node_fs5.existsSync)(monthDir)) return 0;
-  return (0, import_node_fs5.readdirSync)(monthDir).filter((name) => name.endsWith(COST_FILE_EXT)).reduce((sum, name) => sum + readNumber((0, import_node_path4.join)(monthDir, name), "usd", NO_COST), NO_COST);
+function monthSpendUsd(dir, nowMs, report = IGNORE_PROBLEM) {
+  const monthDir = (0, import_node_path5.join)(dir, monthKey(nowMs));
+  if (!(0, import_node_fs6.existsSync)(monthDir)) return NO_COST;
+  return (0, import_node_fs6.readdirSync)(monthDir).filter((name) => name.endsWith(COST_FILE_EXT)).reduce((sum, name) => sum + readNumber((0, import_node_path5.join)(monthDir, name), "usd", NO_COST, report), NO_COST);
 }
 
 // src/statusline.ts
@@ -761,7 +815,6 @@ function contextSegment(cw) {
   const pctInt = Math.round(computePct(cw, size, usedTokens(cw)));
   return ICON_CTX + " " + sgr(ctxColor(pctInt), pctInt + "%");
 }
-var MS_PER_S = 1e3;
 function usageSegment(label, win, windowS, nowS, pace) {
   const used = win?.used_percentage;
   if (typeof used !== "number") return null;
@@ -779,8 +832,8 @@ function usd(amount) {
 function spendSegment(session, cost, budgetUsd, pace, nowMs) {
   const costUsd = cost?.total_cost_usd;
   if (session === "" || typeof costUsd !== "number") return null;
-  recordCost(SPEND_DIR, session, costUsd, nowMs);
-  const spent = monthSpendUsd(SPEND_DIR, nowMs);
+  recordCost(SPEND_DIR, session, costUsd, nowMs, log);
+  const spent = monthSpendUsd(SPEND_DIR, nowMs, log);
   if (budgetUsd === null) return ICON_MONEY + " " + usd(spent);
   const usedPct = spent / budgetUsd * PCT_MAX2;
   const label = ICON_MONEY + " " + usd(spent) + "/" + usd(budgetUsd);
@@ -790,8 +843,9 @@ function spendSegment(session, cost, budgetUsd, pace, nowMs) {
   return label + " " + style.icon + " " + sgr(style.color, Math.round(usedPct) + "%");
 }
 function spendApplies(cfg, p) {
+  if (cfg.statusline.mode === AUTO && p.rate_limits !== void 0) return false;
   const type = resolveType(cfg.statusline.mode, detectAccount().type);
-  return type === "payg" || type === "unknown" && p.rate_limits === void 0;
+  return type === PAYG || type === UNKNOWN && p.rate_limits === void 0;
 }
 function resolveLocation(p, session) {
   const wt = p.worktree;
@@ -799,7 +853,7 @@ function resolveLocation(p, session) {
   if (path === "") return { path, branch: null, isWorktree: false };
   const gitWorktree = p.workspace?.git_worktree;
   if (wt !== void 0 || gitWorktree !== void 0) {
-    const branch = wt?.branch ?? wt?.name ?? gitWorktree ?? ((0, import_node_path5.basename)(path) || path);
+    const branch = wt?.branch ?? wt?.name ?? gitWorktree ?? ((0, import_node_path6.basename)(path) || path);
     if (session !== "") addWorktree(session, { path, branch });
     return { path, branch, isWorktree: true };
   }
@@ -815,33 +869,34 @@ function locationSegment(loc, session, opts) {
   const mark = opts.dirty ? sgr(YELLOW, "*") : "";
   const prs = (branch) => showPrs ? prSuffix(session, branch) : "";
   if (loc.isWorktree) {
-    const label = loc.branch ?? ((0, import_node_path5.basename)(loc.path) || loc.path);
+    const label = loc.branch ?? ((0, import_node_path6.basename)(loc.path) || loc.path);
     return worktreeLink(loc.path, ICON_TREE + " " + label + mark, mode) + prs(loc.branch);
   }
   if (loc.branch !== null) {
-    const label = ((0, import_node_path5.basename)(loc.path) || loc.path) + "(" + loc.branch + mark + ")";
+    const label = ((0, import_node_path6.basename)(loc.path) || loc.path) + "(" + loc.branch + mark + ")";
     return worktreeLink(loc.path, label, mode) + prs(loc.branch);
   }
-  return worktreeLink(loc.path, ICON_TREE + " " + ((0, import_node_path5.basename)(loc.path) || loc.path), mode);
+  return worktreeLink(loc.path, ICON_TREE + " " + ((0, import_node_path6.basename)(loc.path) || loc.path), mode);
 }
 function terminalWidth() {
   return Number(process.env.COLUMNS) || (process.stdout.columns ?? 0);
 }
 function line1(p, session, loc, cfg) {
   const on = cfg.statusline.fields;
-  const dirty = on.location && on.dirty && loc.path !== "" && isDirty(loc.path) === true;
-  const nowS = Date.now() / MS_PER_S;
+  const dirty = on.location && on.dirty && Boolean(loc.path) && isDirty(loc.path) === true;
+  const nowMs = Date.now();
+  const nowS = nowMs / MS_PER_S;
   const mid = [
     on.location ? locationSegment(loc, session, { mode: cfg.worktreeClick, showPrs: on.prs, dirty }) : null,
     on.context ? contextSegment(p.context_window) : null,
     on.model ? p.model?.display_name ?? null : null,
     on.usage5h ? usageSegment("5h", p.rate_limits?.five_hour, FIVE_HOUR_WINDOW_S, nowS, cfg.statusline.pace) : null,
     on.usage7d ? usageSegment("7d", p.rate_limits?.seven_day, SEVEN_DAY_WINDOW_S, nowS, cfg.statusline.pace) : null,
-    on.spend && spendApplies(cfg, p) ? spendSegment(session, p.cost, cfg.statusline.budget.monthlyUsd, cfg.statusline.pace, nowS * MS_PER_S) : null
+    on.spend && spendApplies(cfg, p) ? spendSegment(session, p.cost, cfg.statusline.budget.monthlyUsd, cfg.statusline.pace, nowMs) : null
   ].filter((s) => s !== null && s !== "").join(SEP);
   const showMute = cfg.muted && on.muteIcon;
-  const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
-  const plan = session === "" || !on.plan ? null : getPlan(session);
+  const left = showMute ? [ICON_MUTED, mid].filter(Boolean).join(" ") : mid;
+  const plan = !session || !on.plan ? null : getPlan(session);
   const email = on.account ? readAccountEmail() : null;
   const rightParts = [plan === null ? null : openLink(plan, ICON_MAP + " " + sgr(DIM, "plan")), email === null ? null : sgr(DIM, email)].filter(
     (s) => s !== null
@@ -855,7 +910,7 @@ function line1(p, session, loc, cfg) {
 }
 function worktreeLine(session, loc, cfg) {
   const others = readWorktrees(session).filter((w) => w.branch !== loc.branch);
-  if (others.length === 0) return null;
+  if (!others.length) return null;
   const showPrs = cfg.statusline.fields.prs;
   return others.map((w) => worktreeLink(w.path, w.branch, cfg.worktreeClick) + (showPrs ? prSuffix(session, w.branch) : "")).join("  ");
 }
@@ -888,7 +943,7 @@ function renderStatusline(raw) {
   if (hasSession && model !== void 0 && model !== "") setModel(session, model);
   const loc = resolveLocation(payload, session);
   if (hasSession) {
-    setLabel(session, loc.branch ?? ((0, import_node_path5.basename)(loc.path) || session));
+    setLabel(session, loc.branch ?? ((0, import_node_path6.basename)(loc.path) || session));
     const iterm = process.env.ITERM_SESSION_ID;
     if (iterm !== void 0 && iterm !== "") setItermId(session, iterm);
   }
@@ -941,45 +996,6 @@ function publish(vars) {
   Object.entries(vars).forEach(([name, value]) => {
     setVar(name, value);
   });
-}
-
-// src/log.ts
-var import_node_fs6 = require("node:fs");
-var import_node_path6 = require("node:path");
-var LOG_PATH = (0, import_node_path6.join)(DATA_DIR, "tricorder.log");
-var TAIL_DEFAULT = 40;
-var MAX_LOG_BYTES = 524288;
-var KEEP_LINES = 2e3;
-function stamp() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-function log(line) {
-  try {
-    ensureDir(DATA_DIR);
-    if ((0, import_node_fs6.existsSync)(LOG_PATH) && (0, import_node_fs6.statSync)(LOG_PATH).size > MAX_LOG_BYTES) {
-      const kept = (0, import_node_fs6.readFileSync)(LOG_PATH, "utf8").split("\n").slice(-KEEP_LINES).join("\n");
-      (0, import_node_fs6.writeFileSync)(LOG_PATH, kept);
-    }
-    (0, import_node_fs6.appendFileSync)(LOG_PATH, stamp() + " " + line + "\n");
-  } catch {
-  }
-}
-function showLogs(arg) {
-  if (arg === "clear") {
-    try {
-      (0, import_node_fs6.writeFileSync)(LOG_PATH, "");
-    } catch {
-    }
-    process.stdout.write("cleared " + LOG_PATH + "\n");
-    return;
-  }
-  const n = Number(arg) || TAIL_DEFAULT;
-  try {
-    const lines = (0, import_node_fs6.readFileSync)(LOG_PATH, "utf8").split("\n").filter((l) => l !== "");
-    process.stdout.write(lines.slice(-n).join("\n") + "\n");
-  } catch {
-    process.stdout.write("(no log yet at " + LOG_PATH + ")\n");
-  }
 }
 
 // src/capture.ts
@@ -1468,17 +1484,24 @@ function worktreeClick(arg) {
 }
 
 // src/budgetcmd.ts
-var OFF_WORDS = ["off", "none", "no"];
+var OFF = "off";
+var QUESTIONS = "questions";
+var OFF_WORDS = [OFF, "none", "no"];
 var PRESETS = [
   { label: "$50 / month", value: "50" },
   { label: "$100 / month", value: "100" },
   { label: "$200 / month", value: "200" },
-  { label: "No budget", value: "off" }
+  { label: "No budget", value: OFF }
 ];
 var AMOUNT_NOISE = /[$,\s]/g;
 function parseAmount(text) {
   const n = Number(text.replace(AMOUNT_NOISE, ""));
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+function parseChoice(text) {
+  if (OFF_WORDS.includes(text.toLowerCase())) return { kind: "off" };
+  const usd2 = parseAmount(text);
+  return usd2 === null ? { kind: "invalid" } : { kind: "amount", usd: usd2 };
 }
 function describe(monthlyUsd) {
   return monthlyUsd === null ? "no budget" : "$" + monthlyUsd + " a month";
@@ -1490,7 +1513,7 @@ function budgetQuestions() {
     multiSelect: false,
     options: PRESETS.map((p) => ({
       label: p.label,
-      description: p.value === "off" ? "Show only what has been spent this month." : "Compare spending with $" + p.value + " a month."
+      description: p.value === OFF ? "Show only what has been spent this month." : "Compare spending with $" + p.value + " a month."
     }))
   };
   const values = Object.fromEntries(PRESETS.map((p) => [p.label, p.value]));
@@ -1502,13 +1525,14 @@ function budget(arg) {
     process.stdout.write(describe(cfg.statusline.budget.monthlyUsd) + "\n");
     return;
   }
-  if (arg === "questions") return budgetQuestions();
-  const monthlyUsd = OFF_WORDS.includes(arg.toLowerCase()) ? null : parseAmount(arg);
-  if (monthlyUsd === null && !OFF_WORDS.includes(arg.toLowerCase())) {
+  if (arg === QUESTIONS) return budgetQuestions();
+  const choice = parseChoice(arg);
+  if (choice.kind === "invalid") {
     process.stderr.write("tricorder: budget must be a positive number of dollars, or 'off'\n");
     process.exitCode = 1;
     return;
   }
+  const monthlyUsd = choice.kind === "amount" ? choice.usd : null;
   saveConfig({ ...cfg, statusline: { ...cfg.statusline, budget: { monthlyUsd } } });
   log("budget \u2192 " + describe(monthlyUsd));
   process.stdout.write(describe(monthlyUsd) + "\n");
@@ -1519,6 +1543,7 @@ var import_node_child_process4 = require("node:child_process");
 var import_node_fs10 = require("node:fs");
 var import_node_os2 = require("node:os");
 var import_node_path10 = require("node:path");
+var PREVIEW_RENDER = "preview-render";
 var SESSION = "preview";
 var EXAMPLE_DIR_NAME = "example";
 var EXAMPLE_PR_URL = "https://example.invalid/pull/";
@@ -1530,7 +1555,6 @@ var CONTEXT_USED_PCT = 42;
 var MODEL_NAME = "Opus 5.5";
 var PREVIEW_COLUMNS = "100";
 var RENDER_TIMEOUT_MS = 1e4;
-var MS_PER_S2 = 1e3;
 var FIVE_HOUR_USED_PCT = 37;
 var FIVE_HOUR_ELAPSED_PCT = 40;
 var SEVEN_DAY_USED_PCT = 12;
@@ -1538,9 +1562,6 @@ var SEVEN_DAY_ELAPSED_PCT = 50;
 var EXAMPLE_BUDGET_USD = 200;
 var EXAMPLE_EMAIL = "you@example.com";
 var CENTS_PER_USD = 100;
-function resetsAt(elapsedPct2, windowS) {
-  return Date.now() / MS_PER_S2 + (1 - elapsedPct2 / PCT_MAX) * windowS;
-}
 var exampleDir = () => (0, import_node_path10.join)((0, import_node_os2.homedir)(), EXAMPLE_DIR_NAME);
 function makeDirtyFolder(path) {
   (0, import_node_fs10.mkdirSync)(path, { recursive: true });
@@ -1566,7 +1587,7 @@ function renderPreviewSession() {
   seedSession();
   const path = (0, import_node_path10.join)(exampleDir(), CURRENT_BRANCH);
   makeDirtyFolder(path);
-  const payg = loadConfig().statusline.mode === "payg";
+  const payg = loadConfig().statusline.mode === PAYG;
   renderStatusline(
     JSON.stringify({
       session_id: SESSION,
@@ -1576,8 +1597,8 @@ function renderPreviewSession() {
       context_window: { used_percentage: CONTEXT_USED_PCT },
       ...payg ? { cost: { total_cost_usd: evenPaceSpendUsd() } } : {
         rate_limits: {
-          five_hour: { used_percentage: FIVE_HOUR_USED_PCT, resets_at: resetsAt(FIVE_HOUR_ELAPSED_PCT, FIVE_HOUR_WINDOW_S) },
-          seven_day: { used_percentage: SEVEN_DAY_USED_PCT, resets_at: resetsAt(SEVEN_DAY_ELAPSED_PCT, SEVEN_DAY_WINDOW_S) }
+          five_hour: { used_percentage: FIVE_HOUR_USED_PCT, resets_at: resetsAtS(FIVE_HOUR_ELAPSED_PCT, Date.now() / MS_PER_S, FIVE_HOUR_WINDOW_S) },
+          seven_day: { used_percentage: SEVEN_DAY_USED_PCT, resets_at: resetsAtS(SEVEN_DAY_ELAPSED_PCT, Date.now() / MS_PER_S, SEVEN_DAY_WINDOW_S) }
         }
       }
     })
@@ -1595,19 +1616,21 @@ function previewFields() {
     const statusline = {
       ...cfg.statusline,
       fields: { ...fields2, intro: false },
-      mode: type === "unknown" ? "auto" : type,
+      mode: type === UNKNOWN ? AUTO : type,
       budget: { monthlyUsd: EXAMPLE_BUDGET_USD }
     };
     (0, import_node_fs10.writeFileSync)((0, import_node_path10.join)(home, ".claude.json"), JSON.stringify({ oauthAccount: { emailAddress: EXAMPLE_EMAIL } }));
     (0, import_node_fs10.writeFileSync)((0, import_node_path10.join)(dir, "config.json"), serialize({ ...cfg, muted: true, statusline }));
-    const drawn = (0, import_node_child_process4.execFileSync)(process.execPath, [process.argv[1] ?? "", "fields", "preview-render"], {
+    const script = process.argv[1];
+    if (!script) throw new Error("tricorder: cannot preview, the path of this program is unknown");
+    const drawn = (0, import_node_child_process4.execFileSync)(process.execPath, [script, "fields", PREVIEW_RENDER], {
       env: { PATH: process.env.PATH ?? "", HOME: home, COLUMNS: PREVIEW_COLUMNS },
       encoding: "utf8",
       timeout: RENDER_TIMEOUT_MS
     });
     const intro = FIELDS.find((f) => f.id === "intro");
     const introNote = cfg.statusline.fields.intro && intro ? [intro.sample + "   (crosses the line for the first seconds of a session)"] : [];
-    const spendNote = type === "payg" && fields2.spend ? [`\u{1F4B0} uses an example budget of $${EXAMPLE_BUDGET_USD}. Set yours with: tricorder budget <dollars>`] : [];
+    const spendNote = type === PAYG && fields2.spend ? [`\u{1F4B0} uses an example budget of $${EXAMPLE_BUDGET_USD}. Set yours with: tricorder budget <dollars>`] : [];
     const note = [...introNote, ...spendNote];
     process.stdout.write([plainText(drawn).trimEnd(), ...note].join("\n") + "\n");
   } finally {
@@ -1653,8 +1676,12 @@ function buildQuestionCalls(fields2) {
 
 // src/fieldscmd.ts
 var ALL = "all";
-function parseType(arg, fallback) {
-  return arg === "subscription" || arg === "payg" || arg === "unknown" ? arg : fallback;
+function accountTypeFor(arg) {
+  if (arg === void 0) return resolveType(loadConfig().statusline.mode, detectAccount().type);
+  if (isDetectedType(arg)) return arg;
+  process.stderr.write("tricorder: unknown account type: " + arg + "\nvalid: " + DETECTED_TYPES.join(", ") + "\n");
+  process.exitCode = 1;
+  return null;
 }
 function detect() {
   const cfg = loadConfig();
@@ -1663,8 +1690,9 @@ function detect() {
   process.stdout.write(JSON.stringify({ ...detected, type, mode: cfg.statusline.mode }) + "\n");
 }
 function describeFields(typeArg) {
+  const type = accountTypeFor(typeArg);
+  if (type === null) return;
   const cfg = loadConfig();
-  const type = parseType(typeArg, resolveType(cfg.statusline.mode, detectAccount().type));
   const out = fieldsFor(type).map((f) => ({
     id: f.id,
     name: f.name,
@@ -1676,20 +1704,20 @@ function describeFields(typeArg) {
   process.stdout.write(serialize({ type, fields: out }));
 }
 function questionsFor(typeArg) {
-  const cfg = loadConfig();
-  const type = parseType(typeArg, resolveType(cfg.statusline.mode, detectAccount().type));
+  const type = accountTypeFor(typeArg);
+  if (type === null) return;
   const list = fieldsFor(type);
   const labels = Object.fromEntries(list.map((f) => [f.name, f.id]));
   process.stdout.write(serialize({ enableAllLabel: ENABLE_ALL_LABEL, labels, calls: buildQuestionCalls(list) }));
 }
 function parseFieldList(arg) {
   if (arg.trim().toLowerCase() === ALL) return { ids: FIELD_IDS, unknown: [] };
-  const parts = arg.split(",").map((p) => p.trim()).filter((p) => p !== "");
+  const parts = arg.split(",").map((p) => p.trim()).filter(Boolean);
   return { ids: parts.filter(isFieldId), unknown: parts.filter((p) => !isFieldId(p)) };
 }
 function setFields(arg) {
   const { ids, unknown } = parseFieldList(arg ?? "");
-  if (!!unknown.length) {
+  if (unknown.length) {
     process.stderr.write("tricorder: unknown field(s): " + unknown.join(", ") + "\nvalid: " + FIELD_IDS.join(", ") + "\n");
     process.exitCode = 1;
     return;
@@ -1699,18 +1727,26 @@ function setFields(arg) {
     return;
   }
   const cfg = loadConfig();
-  const fields2 = Object.fromEntries(FIELDS.map((f) => [f.id, ids.includes(f.id)]));
+  const fields2 = buildFields((id) => ids.includes(id));
   saveConfig({ ...cfg, statusline: { ...cfg.statusline, fields: fields2 } });
   log("fields set \u2192 " + ids.join(","));
   process.stdout.write("on: " + ids.join(", ") + "\n");
 }
+var SUBCOMMANDS = {
+  describe: describeFields,
+  questions: questionsFor,
+  preview: () => previewFields(),
+  [PREVIEW_RENDER]: () => renderPreviewSession(),
+  // internal: `preview` runs it in a throwaway home
+  set: setFields
+};
+var USAGE = "usage: tricorder fields describe [type] | fields questions [type] | fields preview | fields set <id,id,...|all>\n";
+function isSubCommand(name) {
+  return name !== void 0 && Object.hasOwn(SUBCOMMANDS, name);
+}
 function fields(sub, arg) {
-  if (sub === "describe") return describeFields(arg);
-  if (sub === "questions") return questionsFor(arg);
-  if (sub === "preview") return previewFields();
-  if (sub === "preview-render") return renderPreviewSession();
-  if (sub === "set") return setFields(arg);
-  process.stderr.write("usage: tricorder fields describe [type] | fields questions [type] | fields preview | fields set <id,id,...|all>\n");
+  if (isSubCommand(sub)) return SUBCOMMANDS[sub](arg);
+  process.stderr.write(USAGE);
   process.exitCode = 1;
 }
 
