@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseAmount } from "../src/budgetcmd";
+import { parseAmount, parseChoice } from "../src/budgetcmd";
+import { HEADER_MAX_CHARS } from "../src/questions";
 import { readConfig, run, sandbox } from "./helpers";
 
 // Hand check: what people type, and the number it means (null = refused).
@@ -14,17 +15,33 @@ const AMOUNTS = [
   { typed: "", amount: null },
 ] as const;
 
+// Hand check: "off" words are a choice of their own, not an error; unusable text is invalid.
+const CHOICES = [
+  { typed: "off", choice: { kind: "off" } },
+  { typed: "NONE", choice: { kind: "off" } },
+  { typed: "no", choice: { kind: "off" } },
+  { typed: "$150", choice: { kind: "amount", usd: 150 } },
+  { typed: "0", choice: { kind: "invalid" } },
+  { typed: "abc", choice: { kind: "invalid" } },
+] as const;
+
+CHOICES.forEach((c) => {
+  test(`parseChoice("${c.typed}") → ${c.choice.kind}`, () => {
+    assert.deepEqual(parseChoice(c.typed), c.choice);
+  });
+});
+
 AMOUNTS.forEach((a) => {
   test(`parseAmount("${a.typed}") → ${a.amount}`, () => {
     assert.equal(parseAmount(a.typed), a.amount);
   });
 });
 
+// Cast: readConfig only types the fields; the budget block is read here, and the tests assert its value.
 const budgetOf = (box: ReturnType<typeof sandbox>): unknown => (readConfig(box).statusline as { budget?: { monthlyUsd: unknown } }).budget?.monthlyUsd;
 const BUDGET = "budget";
 const OFF = "off";
 const AMOUNT = { plain: 200, formatted: 1200.5 } as const;
-const HEADER_MAX = 12;
 
 test("budget: set, read back, remove", () => {
   const box = sandbox();
@@ -57,7 +74,7 @@ test("budget questions: one single-choice question, four options, each with a va
   assert.equal(out.question.options.length, Object.keys(out.values).length);
   assert.equal(out.values["No budget"], OFF);
   assert.equal(out.values["$200 / month"], "200");
-  assert.ok(out.question.header.length <= HEADER_MAX);
+  assert.ok(out.question.header.length <= HEADER_MAX_CHARS);
 });
 
 test("choosing fields afterwards keeps the budget", () => {

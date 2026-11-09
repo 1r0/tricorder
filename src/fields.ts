@@ -5,26 +5,37 @@
 // This file must not import from config.ts (config.ts imports it for the
 // defaults).
 
+import { DEFAULT_PACE } from "./pace";
+
 // "subscription" = signed in with a Claude account (Pro, Max, Team...).
 // "payg"         = pay per use: an API key or a cloud-provider login.
 // "unknown"      = the account could not be detected; every field is offered.
-const SUBSCRIPTION = "subscription";
-const PAYG = "payg";
-export type AccountType = typeof SUBSCRIPTION | typeof PAYG;
-export type DetectedType = AccountType | "unknown";
+export const SUBSCRIPTION = "subscription";
+export const PAYG = "payg";
+export const UNKNOWN = "unknown";
+export const AUTO = "auto";
 
-export const ACCOUNT_MODES = ["auto", "subscription", "payg"] as const;
+// Each fixed set is written once; the types and the other sets are derived from it.
+export const ACCOUNT_TYPES = [SUBSCRIPTION, PAYG] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
+
+export const DETECTED_TYPES = [...ACCOUNT_TYPES, UNKNOWN] as const;
+export type DetectedType = (typeof DETECTED_TYPES)[number];
+
+export const ACCOUNT_MODES = [AUTO, ...ACCOUNT_TYPES] as const;
 export type AccountMode = (typeof ACCOUNT_MODES)[number];
 
 export function isAccountMode(value: unknown): value is AccountMode {
   return (ACCOUNT_MODES as readonly unknown[]).includes(value);
 }
 
+export function isDetectedType(value: unknown): value is DetectedType {
+  return (DETECTED_TYPES as readonly unknown[]).includes(value);
+}
+
 export interface FieldInfo {
   readonly id: string;
   readonly name: string;
-  // Which statusline line the field is drawn on (for grouping in setup).
-  readonly line: "main" | "worktrees" | "subagents" | "intro";
   readonly shows: string;
   // Example output, as plain text.
   readonly sample: string;
@@ -34,17 +45,20 @@ export interface FieldInfo {
   readonly defaultOn: boolean;
 }
 
-const EVERY_ACCOUNT: readonly AccountType[] = [SUBSCRIPTION, PAYG];
+const EVERY_ACCOUNT: readonly AccountType[] = ACCOUNT_TYPES;
 const SUBSCRIPTION_ONLY: readonly AccountType[] = [SUBSCRIPTION];
 const PAYG_ONLY: readonly AccountType[] = [PAYG];
 
+// The "too early to tell" share is read from the default, so this text cannot disagree with it.
+const EARLY_PCT = DEFAULT_PACE.minElapsedPct;
+
 // Shared by the usage fields: what the animal and the colour of the percentage mean.
 const PACE_LEGEND =
-  "The animal and the colour compare your use with the time gone in the window: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = limit reached. In the first 3% of a window it is too early to tell, so a 🦥 sloth (grey) shows instead. (Margin and 3% are settings: statusline.pace.)";
+  `The animal and the colour compare your use with the time gone in the window: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = limit reached. In the first ${EARLY_PCT}% of a window it is too early to tell, so a 🦥 sloth (grey) shows instead. (Margin and ${EARLY_PCT}% are settings: statusline.pace.)`;
 
 // What the spend field shows and means, for accounts that pay per use.
 const SPEND_LEGEND =
-  "💰 = spend this month, in US dollars (calendar month, UTC). With a budget the animal and the colour compare the share of the budget spent with the share of the month gone: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = over budget (more than 100% spent), 🦥 grey = the first 3% of the month, too early to tell. The budget is not a limit. The figure is an estimate kept by tricorder: it misses sessions without a statusline, other machines and other tools using the same key.";
+  `💰 = spend this month, in US dollars (calendar month, UTC). With a budget the animal and the colour compare the share of the budget spent with the share of the month gone: 🐢 green = well under an even pace, 🐕 blue = on pace, 🐎 orange = a little fast, 🦅 red = too fast, 🐉 magenta = over budget (more than 100% spent), 🦥 grey = the first ${EARLY_PCT}% of the month, too early to tell. The budget is not a limit. The figure is an estimate kept by tricorder: it misses sessions without a statusline, other machines and other tools using the same key.`;
 
 // Order here is the order the fields appear on the statusline, left to right,
 // then top to bottom (line 1: mute icon, location with its uncommitted-changes
@@ -58,7 +72,6 @@ export const FIELDS = [
   {
     id: "muteIcon",
     name: "Mute icon",
-    line: "main",
     shows: "A speaker icon at the start of the line while sounds are muted.",
     sample: "🔇",
     legend: "🔇 = sounds are muted.",
@@ -68,7 +81,6 @@ export const FIELDS = [
   {
     id: "location",
     name: "Location",
-    line: "main",
     shows: "The folder and branch you are working in, as a clickable link. In a worktree session it shows the branch with a tree icon.",
     sample: "my-repo(main)   or   🌳 fix-login",
     legend: "Clicking opens the folder, copies the path, or both (see worktreeClick in the config).",
@@ -78,7 +90,6 @@ export const FIELDS = [
   {
     id: "dirty",
     name: "Uncommitted changes",
-    line: "main",
     shows: "A yellow * after the branch name when the folder has changes that are not committed yet (edited, staged or new files).",
     sample: "my-repo(main*)   or   🌳 fix-login*",
     legend: "Yellow *. Nothing is shown for a folder that is not a git repository.",
@@ -88,7 +99,6 @@ export const FIELDS = [
   {
     id: "prs",
     name: "Pull requests",
-    line: "main",
     shows: "A clickable tag for each pull request this session opened from the current branch.",
     sample: "(#12)",
     legend: "Cyan.",
@@ -98,7 +108,6 @@ export const FIELDS = [
   {
     id: "context",
     name: "Context window",
-    line: "main",
     shows: "How full the model's context window is.",
     sample: "🔋 42%",
     legend: "🔋 = context window. Green below 70%, yellow 70-89%, red from 90%.",
@@ -108,7 +117,6 @@ export const FIELDS = [
   {
     id: "model",
     name: "Model",
-    line: "main",
     shows: "The name of the model this session is using.",
     sample: "Opus 5.5",
     legend: "",
@@ -118,7 +126,6 @@ export const FIELDS = [
   {
     id: "usage5h",
     name: "5-hour usage",
-    line: "main",
     shows: "How much of your 5-hour usage limit you have used, and whether you are using it faster or slower than an even pace.",
     sample: "5h 🐕 37%",
     legend: PACE_LEGEND,
@@ -128,7 +135,6 @@ export const FIELDS = [
   {
     id: "usage7d",
     name: "7-day usage",
-    line: "main",
     shows: "How much of your 7-day usage limit you have used, and whether you are using it faster or slower than an even pace.",
     sample: "7d 🐢 12%",
     legend: PACE_LEGEND,
@@ -138,7 +144,6 @@ export const FIELDS = [
   {
     id: "spend",
     name: "Monthly spend",
-    line: "main",
     shows: "What you have spent this month on Claude usage (an estimate), and, if you set a monthly budget, how that compares with an even spread of the budget over the month.",
     sample: "💰 $62/$200 🐕 31%   (no budget set: 💰 $62)",
     legend: SPEND_LEGEND,
@@ -148,7 +153,6 @@ export const FIELDS = [
   {
     id: "remote",
     name: "Remote Control",
-    line: "main",
     shows: "A marker while Remote Control is on for this session, so you know it can be reached from another device.",
     sample: "📡 remote",
     legend: "📡 = Remote Control is on. Read from Claude Code's own session file; if that cannot be read, nothing is shown.",
@@ -158,7 +162,6 @@ export const FIELDS = [
   {
     id: "plan",
     name: "Plan link",
-    line: "main",
     shows: "A link to the current plan file, at the right edge, once the session has one.",
     sample: "🗺️ plan",
     legend: "🗺️ = plan file. Grey text.",
@@ -168,7 +171,6 @@ export const FIELDS = [
   {
     id: "account",
     name: "Account email",
-    line: "main",
     shows: "The email you are signed in with, at the right edge of the first line, so you can tell your accounts apart. It also shows in screenshots and screen shares: switch it off if that matters.",
     sample: "you@example.com",
     legend: "Grey text. Read from Claude Code's own account file; nothing is shown if it cannot be found.",
@@ -178,7 +180,6 @@ export const FIELDS = [
   {
     id: "worktrees",
     name: "Other worktrees",
-    line: "worktrees",
     shows: "A second line listing the other worktrees this session has visited, each with its pull requests.",
     sample: "fix-login (#12)  add-tests",
     legend: "",
@@ -188,7 +189,6 @@ export const FIELDS = [
   {
     id: "subagents",
     name: "Sub-agents",
-    line: "subagents",
     shows: "A line listing the sub-agents running right now, with the model each one uses.",
     sample: "🤖 Explore Opus 4.8, review Sonnet 5",
     legend: "🤖 = sub-agents. Model names in grey.",
@@ -198,7 +198,6 @@ export const FIELDS = [
   {
     id: "intro",
     name: "Start-up animation",
-    line: "intro",
     shows: "A small ship that crosses the line for the first 4 seconds of a session.",
     sample: "o≡≡≡>",
     legend: "Cyan.",
@@ -216,12 +215,19 @@ export function isFieldId(value: unknown): value is FieldId {
   return (FIELD_IDS as readonly unknown[]).includes(value);
 }
 
-export function defaultFields(): Record<FieldId, boolean> {
-  return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn])) as Record<FieldId, boolean>;
+// The one place a per-field table is built. Every FieldId is present because the
+// keys come from FIELD_IDS, which is why the cast is safe; callers need no cast of their own.
+export function buildFields(valueFor: (id: FieldId) => boolean): Readonly<Record<FieldId, boolean>> {
+  return Object.fromEntries(FIELD_IDS.map((id) => [id, valueFor(id)])) as Record<FieldId, boolean>;
+}
+
+export function defaultFields(): Readonly<Record<FieldId, boolean>> {
+  return buildFields((id) => FIELDS.some((f) => f.id === id && f.defaultOn));
 }
 
 // A field applies to an account type if it lists it. An undetected account
 // ("unknown") is offered every field, so nothing is hidden by a wrong guess.
 export function fieldsFor(type: DetectedType): readonly Field[] {
-  return FIELDS.filter((f) => type === "unknown" || (f.appliesTo as readonly AccountType[]).includes(type));
+  // Cast: `as const` gives each field its own tuple type; widened here so one `includes` fits all of them.
+  return FIELDS.filter((f) => type === UNKNOWN || (f.appliesTo as readonly AccountType[]).includes(type));
 }

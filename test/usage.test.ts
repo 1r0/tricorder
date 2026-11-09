@@ -1,11 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FIELD_IDS } from "../src/fields";
-import { FIVE_HOUR_WINDOW_S, PCT_MAX, SEVEN_DAY_WINDOW_S } from "../src/pace";
+import { FIVE_HOUR_WINDOW_S, MS_PER_S, resetsAtS, SEVEN_DAY_WINDOW_S } from "../src/pace";
 import { plain, run, sandbox, writeConfig } from "./helpers";
 
 // Only the usage fields are on, so the output is just "5h … · 7d …".
-const MS_PER_S = 1000;
 const ONLY_USAGE = Object.fromEntries(FIELD_IDS.map((id) => [id, id === "usage5h" || id === "usage7d"]));
 const HALF = 50; // half of the window gone
 const USED = { onTrack: 55, watchOut: 65, hot: 75, chill: 30, over: 100, early: 5, noReset: 40 } as const;
@@ -19,7 +18,7 @@ const COLOUR_GREY = "\x1b[90m";
 
 // A limit whose window is `elapsed`% gone, with `used`% of the limit used.
 function limit(used: number, elapsed: number, windowS: number) {
-  return { used_percentage: used, resets_at: Date.now() / MS_PER_S + (1 - elapsed / PCT_MAX) * windowS };
+  return { used_percentage: used, resets_at: resetsAtS(elapsed, Date.now() / MS_PER_S, windowS) };
 }
 
 function statusline(payload: unknown, fields: Record<string, boolean> = ONLY_USAGE) {

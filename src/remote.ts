@@ -32,6 +32,7 @@ export function processExists(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (err) {
+    // Cast: process.kill only throws system errors, which carry a `code`.
     return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
@@ -42,15 +43,15 @@ export function remoteFromRecords(records: readonly unknown[], sessionId: string
     .filter(isRecord)
     .filter((r) => r.sessionId === sessionId && typeof r.pid === "number" && isAlive(r.pid));
   const newest = mine.reduce<SessionRecord | null>((best, r) => (best === null || updatedAt(r) > updatedAt(best) ? r : best), null);
-  return newest !== null && typeof newest.bridgeSessionId === "string" && newest.bridgeSessionId !== "";
+  return newest !== null && typeof newest.bridgeSessionId === "string" && Boolean(newest.bridgeSessionId);
 }
 
 // The account's session folder: CLAUDE_CONFIG_DIR when set, else ~/.claude.
 export function sessionsDir(): string | null {
   const dir = process.env.CLAUDE_CONFIG_DIR;
-  if (dir !== undefined && dir !== "") return join(dir, SESSIONS_DIR);
+  if (dir) return join(dir, SESSIONS_DIR);
   const home = process.env.HOME;
-  return home === undefined || home === "" ? null : join(home, ".claude", SESSIONS_DIR);
+  return home ? join(home, ".claude", SESSIONS_DIR) : null;
 }
 
 function readRecords(dir: string): readonly unknown[] {
@@ -71,5 +72,5 @@ function readRecords(dir: string): readonly unknown[] {
 
 export function remoteActive(sessionId: string): boolean {
   const dir = sessionsDir();
-  return sessionId !== "" && dir !== null && remoteFromRecords(readRecords(dir), sessionId, processExists);
+  return Boolean(sessionId) && dir !== null && remoteFromRecords(readRecords(dir), sessionId, processExists);
 }
