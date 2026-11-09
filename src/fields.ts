@@ -73,7 +73,6 @@ export const FIELDS = [
   {
     id: "dirty",
     name: "Uncommitted changes",
-    line: "main",
     shows: "A yellow * after the branch name when the folder has changes that are not committed yet (edited, staged or new files).",
     sample: "my-repo(main*)   or   🌳 fix-login*",
     legend: "Yellow *. Nothing is shown for a folder that is not a git repository.",
