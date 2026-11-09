@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AccountMode, AccountType, DetectedType } from "./fields";
+import { PAYG, SUBSCRIPTION, UNKNOWN, AUTO, type AccountMode, type AccountType, type DetectedType } from "./fields";
 
 // What kind of account this session runs under, so setup and the statusline
 // can offer only the fields that make sense: a subscription has usage limits
@@ -20,11 +20,12 @@ export interface Detection {
   readonly extraUsage: boolean;
 }
 
-export const UNKNOWN_ACCOUNT: Detection = { type: "unknown", plan: null, extraUsage: false };
+export const UNKNOWN_ACCOUNT: Detection = { type: UNKNOWN, plan: null, extraUsage: false };
 
-interface OauthAccount {
-  readonly organizationType?: unknown;
-  readonly hasExtraUsageEnabled?: unknown;
+// One field of a parsed JSON value, or undefined when the value is not an object or lacks it.
+// Cast: after the checks the value is an object, and `key in value` has confirmed the key.
+export function readField(value: unknown, key: string): unknown {
+  return typeof value === "object" && value !== null && key in value ? (value as Record<string, unknown>)[key] : undefined;
 }
 
 // Pure: decides the type from the parsed contents of .claude.json.
@@ -33,21 +34,21 @@ interface OauthAccount {
 // - A readable file without one means an API key or cloud-provider login.
 export function classify(parsed: unknown): Detection {
   if (typeof parsed !== "object" || parsed === null) return UNKNOWN_ACCOUNT;
-  const oauth = (parsed as { oauthAccount?: unknown }).oauthAccount;
-  if (typeof oauth !== "object" || oauth === null) return { type: "payg", plan: null, extraUsage: false };
-  const account = oauth as OauthAccount;
+  const oauth = readField(parsed, "oauthAccount");
+  if (typeof oauth !== "object" || oauth === null) return { type: PAYG, plan: null, extraUsage: false };
+  const plan = readField(oauth, "organizationType");
   return {
-    type: "subscription",
-    plan: typeof account.organizationType === "string" ? account.organizationType : null,
-    extraUsage: account.hasExtraUsageEnabled === true,
+    type: SUBSCRIPTION,
+    plan: typeof plan === "string" ? plan : null,
+    extraUsage: readField(oauth, "hasExtraUsageEnabled") === true,
   };
 }
 
 export function accountFilePath(): string | null {
   const dir = process.env.CLAUDE_CONFIG_DIR;
-  if (dir !== undefined && dir !== "") return join(dir, ".claude.json");
+  if (dir) return join(dir, ".claude.json");
   const home = process.env.HOME;
-  return home === undefined || home === "" ? null : join(home, ".claude.json");
+  return home ? join(home, ".claude.json") : null;
 }
 
 // The parsed account file, read at most once per run (a statusline redraw needs
@@ -72,9 +73,8 @@ export function detectAccount(): Detection {
 // Pure: the sign-in email in the parsed .claude.json (`oauthAccount.emailAddress`),
 // or null when there is none. Pay-per-use logins have no account entry, so no email.
 export function emailOf(parsed: unknown): string | null {
-  const oauth = (parsed as { oauthAccount?: { emailAddress?: unknown } } | null)?.oauthAccount;
-  const email = oauth?.emailAddress;
-  return typeof email === "string" && email !== "" ? email : null;
+  const email = readField(readField(parsed, "oauthAccount"), "emailAddress");
+  return typeof email === "string" && email ? email : null;
 }
 
 export function readAccountEmail(): string | null {
@@ -83,5 +83,5 @@ export function readAccountEmail(): string | null {
 
 // The config can force the type; "auto" uses what was detected.
 export function resolveType(mode: AccountMode, detected: DetectedType): DetectedType {
-  return mode === "auto" ? detected : (mode satisfies AccountType);
+  return mode === AUTO ? detected : (mode satisfies AccountType);
 }

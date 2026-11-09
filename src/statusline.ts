@@ -12,9 +12,11 @@ import {
   setModel,
 } from "./state";
 import { detectAccount, readAccountEmail, resolveType } from "./account";
+import { AUTO, PAYG, UNKNOWN } from "./fields";
 import { currentBranch, isDirty } from "./git";
 import { remoteActive } from "./remote";
-import { budgetBand, elapsedPct, FIVE_HOUR_WINDOW_S, formatRemaining, limitBand, PACE_STYLES, SEVEN_DAY_WINDOW_S, showsResetNote, type PaceBand, type PaceConfig } from "./pace";
+import { budgetBand, elapsedPct, FIVE_HOUR_WINDOW_S, formatRemaining, limitBand, MS_PER_S, PACE_STYLES, SEVEN_DAY_WINDOW_S, showsResetNote, type PaceBand, type PaceConfig } from "./pace";
+import { log } from "./log";
 import { monthElapsedPct, monthSpendUsd, recordCost } from "./spend";
 
 // ---- payload shape (subset of the statusline stdin JSON) -------------------
@@ -180,12 +182,14 @@ function contextSegment(cw: ContextWindow | undefined): string | null {
 
 // ---- usage limits (5h / 7d) with pace ---------------------------------------
 
-const MS_PER_S = 1000;
-
 // "(reset in 42m)": the time until the limit resets, when the setting says this band shows it.
-function resetNote(remainingS: number, band: PaceBand | null, pace: PaceConfig): string | null {
-  return remainingS > 0 && showsResetNote(band, pace.resetNoteFrom) ? "(reset in " + formatRemaining(remainingS) + ")" : null;
+// `remainingS` is null when Claude Code sent no reset time: then there is nothing to show.
+function resetNote(remainingS: number | null, band: PaceBand | null, pace: PaceConfig): string | null {
+  return remainingS !== null && remainingS > 0 && showsResetNote(band, pace.resetNoteFrom) ? "(reset in " + formatRemaining(remainingS) + ")" : null;
 }
+
+// The parts that are present, joined by one space.
+const present = (parts: readonly (string | null)[]): string => parts.filter((s): s is string => s !== null).join(" ");
 
 // "5h 🐕 37%": the label, an animal for the pace, and the percent used in the
 // pace colour. Without a usable pace (window unknown or just started) only the
@@ -197,11 +201,10 @@ function usageSegment(label: string, win: RateWindow | undefined, windowS: numbe
   const pct = Math.round(used) + "%";
   const resets = win?.resets_at;
   const band = limitBand(used, typeof resets === "number" ? elapsedPct(resets, nowS, windowS) : null, pace);
-  const note = resetNote(typeof resets === "number" ? resets - nowS : 0, band, pace);
-  if (band === null) return [label + " " + pct, note].filter((s): s is string => s !== null).join(" ");
+  const note = resetNote(typeof resets === "number" ? resets - nowS : null, band, pace);
+  if (band === null) return present([label + " " + pct, note]);
   const style = PACE_STYLES[band];
-  const shown = [pct, note].filter((s): s is string => s !== null).map((s) => sgr(style.color, s));
-  return label + " " + style.icon + " " + shown.join(" ");
+  return label + " " + style.icon + " " + present([pct, note].map((s) => (s === null ? null : sgr(style.color, s))));
 }
 
 // ---- monthly spend (pay per use) ---------------------------------------------
@@ -219,8 +222,8 @@ function usd(amount: number): string {
 function spendSegment(session: string, cost: Cost | undefined, budgetUsd: number | null, pace: PaceConfig, nowMs: number): string | null {
   const costUsd = cost?.total_cost_usd;
   if (session === "" || typeof costUsd !== "number") return null;
-  recordCost(SPEND_DIR, session, costUsd, nowMs);
-  const spent = monthSpendUsd(SPEND_DIR, nowMs);
+  recordCost(SPEND_DIR, session, costUsd, nowMs, log);
+  const spent = monthSpendUsd(SPEND_DIR, nowMs, log);
   if (budgetUsd === null) return ICON_MONEY + " " + usd(spent);
   const usedPct = (spent / budgetUsd) * PCT_MAX;
   const label = ICON_MONEY + " " + usd(spent) + "/" + usd(budgetUsd);
@@ -235,8 +238,11 @@ function spendSegment(session: string, cost: Cost | undefined, budgetUsd: number
 // pay-per-use accounts. If the account type could not be detected, it is shown
 // only when the payload has no usage limits (subscriptions have them).
 function spendApplies(cfg: Config, p: Payload): boolean {
+  // Usage limits in the payload only ever come with a subscription, so the answer is
+  // known without reading the account file (which can be large) on every redraw.
+  if (cfg.statusline.mode === AUTO && p.rate_limits !== undefined) return false;
   const type = resolveType(cfg.statusline.mode, detectAccount().type);
-  return type === "payg" || (type === "unknown" && p.rate_limits === undefined);
+  return type === PAYG || (type === UNKNOWN && p.rate_limits === undefined);
 }
 
 // ---- location (worktree / branch) + PR matching -----------------------------
@@ -307,23 +313,24 @@ function terminalWidth(): number {
 function line1(p: Payload, session: string, loc: Location, cfg: Config): string {
   const on = cfg.statusline.fields;
   // git is only asked when the field is on, so switching it off also saves the call.
-  const dirty = on.location && on.dirty && loc.path !== "" && isDirty(loc.path) === true;
-  const nowS = Date.now() / MS_PER_S;
+  const dirty = on.location && on.dirty && Boolean(loc.path) && isDirty(loc.path) === true;
+  const nowMs = Date.now();
+  const nowS = nowMs / MS_PER_S;
   const mid = [
     on.location ? locationSegment(loc, session, { mode: cfg.worktreeClick, showPrs: on.prs, dirty }) : null,
     on.context ? contextSegment(p.context_window) : null,
     on.model ? (p.model?.display_name ?? null) : null,
     on.usage5h ? usageSegment("5h", p.rate_limits?.five_hour, FIVE_HOUR_WINDOW_S, nowS, cfg.statusline.pace) : null,
     on.usage7d ? usageSegment("7d", p.rate_limits?.seven_day, SEVEN_DAY_WINDOW_S, nowS, cfg.statusline.pace) : null,
-    on.spend && spendApplies(cfg, p) ? spendSegment(session, p.cost, cfg.statusline.budget.monthlyUsd, cfg.statusline.pace, nowS * MS_PER_S) : null,
+    on.spend && spendApplies(cfg, p) ? spendSegment(session, p.cost, cfg.statusline.budget.monthlyUsd, cfg.statusline.pace, nowMs) : null,
     on.remote && remoteActive(session) ? ICON_REMOTE + " remote" : null,
   ]
     .filter((s): s is string => s !== null && s !== "")
     .join(SEP);
   // Passive mute indicator only (audio control lives in the menu-bar app now).
   const showMute = cfg.muted && on.muteIcon;
-  const left = showMute ? [ICON_MUTED, mid].filter((s) => s !== "").join(" ") : mid;
-  const plan = session === "" || !on.plan ? null : getPlan(session);
+  const left = showMute ? [ICON_MUTED, mid].filter(Boolean).join(" ") : mid;
+  const plan = !session || !on.plan ? null : getPlan(session);
   const email = on.account ? readAccountEmail() : null;
   const rightParts = [plan === null ? null : openLink(plan, ICON_MAP + " " + sgr(DIM, "plan")), email === null ? null : sgr(DIM, email)].filter(
     (s): s is string => s !== null,
@@ -343,7 +350,7 @@ function line1(p: Payload, session: string, loc: Location, cfg: Config): string 
 // can make the same worktree look like two different paths.
 function worktreeLine(session: string, loc: Location, cfg: Config): string | null {
   const others = readWorktrees(session).filter((w) => w.branch !== loc.branch);
-  if (others.length === 0) return null;
+  if (!others.length) return null;
   const showPrs = cfg.statusline.fields.prs;
   return others
     .map((w) => worktreeLink(w.path, w.branch, cfg.worktreeClick) + (showPrs ? prSuffix(session, w.branch) : ""))
