@@ -99,8 +99,11 @@ var FIELD_IDS = FIELDS.map((f) => f.id);
 function isFieldId(value) {
   return FIELD_IDS.includes(value);
 }
+function buildFields(valueFor) {
+  return Object.fromEntries(FIELD_IDS.map((id) => [id, valueFor(id)]));
+}
 function defaultFields() {
-  return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn]));
+  return buildFields((id) => FIELDS.some((f) => f.id === id && f.defaultOn));
 }
 
 // src/config.ts
@@ -159,9 +162,10 @@ function loadConfig() {
 }
 function mergeStatusline(base, override) {
   const given = override?.fields;
-  const fields2 = Object.fromEntries(
-    FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]])
-  );
+  const fields2 = buildFields((id) => {
+    const value = given?.[id];
+    return typeof value === "boolean" ? value : base.fields[id];
+  });
   return { fields: fields2 };
 }
 function mergeConfig(base, override) {
@@ -1192,7 +1196,7 @@ function parseFieldList(arg) {
 }
 function setFields(arg) {
   const { ids, unknown } = parseFieldList(arg ?? "");
-  if (!!unknown.length) {
+  if (unknown.length) {
     process.stderr.write("tricorder: unknown field(s): " + unknown.join(", ") + "\nvalid: " + FIELD_IDS.join(", ") + "\n");
     process.exitCode = 1;
     return;
@@ -1202,15 +1206,22 @@ function setFields(arg) {
     return;
   }
   const cfg = loadConfig();
-  const fields2 = Object.fromEntries(FIELDS.map((f) => [f.id, ids.includes(f.id)]));
+  const fields2 = buildFields((id) => ids.includes(id));
   saveConfig({ ...cfg, statusline: { fields: fields2 } });
   log("fields set \u2192 " + ids.join(","));
   process.stdout.write("on: " + ids.join(", ") + "\n");
 }
+var SUBCOMMANDS = {
+  describe: () => describeFields(),
+  set: setFields
+};
+var USAGE = "usage: tricorder fields describe | fields set <id,id,...|all>\n";
+function isSubCommand(name) {
+  return name !== void 0 && Object.hasOwn(SUBCOMMANDS, name);
+}
 function fields(sub, arg) {
-  if (sub === "describe") return describeFields();
-  if (sub === "set") return setFields(arg);
-  process.stderr.write("usage: tricorder fields describe | fields set <id,id,...|all>\n");
+  if (isSubCommand(sub)) return SUBCOMMANDS[sub](arg);
+  process.stderr.write(USAGE);
   process.exitCode = 1;
 }
 

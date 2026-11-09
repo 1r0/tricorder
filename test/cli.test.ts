@@ -40,6 +40,15 @@ test("statusline: with every line-1 field off nothing is printed", () => {
   assert.equal(statusline(box, project()), "");
 });
 
+test("fields: an unknown sub-command, even an inherited name like toString, prints usage and fails", () => {
+  const box = sandbox();
+  ["bogus", "toString"].forEach((name) => {
+    const r = run(box, ["fields", name]);
+    assert.equal(r.status, 1, name);
+    assert.ok(r.stderr.includes("usage: tricorder fields"), name);
+  });
+});
+
 test("fields set: exactly the listed fields are on, the rest are off", () => {
   const box = sandbox();
   const r = run(box, ["fields", "set", "context,model"]);

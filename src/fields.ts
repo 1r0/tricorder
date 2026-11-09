@@ -105,7 +105,12 @@ export function isFieldId(value: unknown): value is FieldId {
   return (FIELD_IDS as readonly unknown[]).includes(value);
 }
 
-export function defaultFields(): Record<FieldId, boolean> {
-  // Cast is safe: the keys come from FIELD_IDS, so every FieldId is present.
-  return Object.fromEntries(FIELDS.map((f) => [f.id, f.defaultOn])) as Record<FieldId, boolean>;
+// The one place a per-field table is built. Every FieldId is present because the
+// keys come from FIELD_IDS, which is why the cast is safe; callers need no cast of their own.
+export function buildFields(valueFor: (id: FieldId) => boolean): Readonly<Record<FieldId, boolean>> {
+  return Object.fromEntries(FIELD_IDS.map((id) => [id, valueFor(id)])) as Record<FieldId, boolean>;
+}
+
+export function defaultFields(): Readonly<Record<FieldId, boolean>> {
+  return buildFields((id) => FIELDS.some((f) => f.id === id && f.defaultOn));
 }

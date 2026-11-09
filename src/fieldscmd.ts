@@ -1,5 +1,5 @@
 import { loadConfig, saveConfig, serialize } from "./config";
-import { FIELD_IDS, FIELDS, isFieldId, type FieldId } from "./fields";
+import { buildFields, FIELD_IDS, FIELDS, isFieldId, type FieldId } from "./fields";
 import { log } from "./log";
 
 const ALL = "all";
@@ -33,7 +33,7 @@ export function parseFieldList(arg: string): { readonly ids: readonly FieldId[];
 // every other field is off. An empty list or an unknown id changes nothing.
 export function setFields(arg: string | undefined): void {
   const { ids, unknown } = parseFieldList(arg ?? "");
-  if (!!unknown.length) {
+  if (unknown.length) {
     process.stderr.write("tricorder: unknown field(s): " + unknown.join(", ") + "\nvalid: " + FIELD_IDS.join(", ") + "\n");
     process.exitCode = 1;
     return;
@@ -43,16 +43,29 @@ export function setFields(arg: string | undefined): void {
     return;
   }
   const cfg = loadConfig();
-  // Cast is safe: the keys come from FIELD_IDS, so every FieldId is present.
-  const fields = Object.fromEntries(FIELDS.map((f) => [f.id, ids.includes(f.id)])) as Record<FieldId, boolean>;
+  const fields = buildFields((id) => ids.includes(id));
   saveConfig({ ...cfg, statusline: { fields } });
   log("fields set → " + ids.join(","));
   process.stdout.write("on: " + ids.join(", ") + "\n");
 }
 
+type SubCommand = (arg: string | undefined) => void;
+
+// One entry per `tricorder fields <name>`; adding a sub-command is adding a line here.
+const SUBCOMMANDS = {
+  describe: () => describeFields(),
+  set: setFields,
+} as const satisfies Record<string, SubCommand>;
+
+const USAGE = "usage: tricorder fields describe | fields set <id,id,...|all>\n";
+
+// hasOwn, not `in`: "toString" must not count as a sub-command.
+function isSubCommand(name: string | undefined): name is keyof typeof SUBCOMMANDS {
+  return name !== undefined && Object.hasOwn(SUBCOMMANDS, name);
+}
+
 export function fields(sub: string | undefined, arg: string | undefined): void {
-  if (sub === "describe") return describeFields();
-  if (sub === "set") return setFields(arg);
-  process.stderr.write("usage: tricorder fields describe | fields set <id,id,...|all>\n");
+  if (isSubCommand(sub)) return SUBCOMMANDS[sub](arg);
+  process.stderr.write(USAGE);
   process.exitCode = 1;
 }

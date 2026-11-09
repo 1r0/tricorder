@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { defaultFields, FIELD_IDS, type FieldId } from "./fields";
+import { buildFields, defaultFields, type FieldId } from "./fields";
 
 const JSON_INDENT = 2;
 
@@ -37,7 +37,7 @@ export function isWorktreeClickMode(value: unknown): value is WorktreeClickMode 
 
 // Which statusline fields are drawn (see src/fields.ts for the list).
 export interface StatuslineConfig {
-  readonly fields: Record<FieldId, boolean>;
+  readonly fields: Readonly<Record<FieldId, boolean>>;
 }
 
 export interface Config {
@@ -95,10 +95,10 @@ export function loadConfig(): Config {
 function mergeStatusline(base: StatuslineConfig, override: Partial<StatuslineConfig> | undefined): StatuslineConfig {
   // Cast: the config file is user-edited JSON, so each value is checked with typeof below.
   const given = override?.fields as Partial<Record<string, unknown>> | undefined;
-  // Cast is safe: the keys come from FIELD_IDS, so every FieldId is present.
-  const fields = Object.fromEntries(
-    FIELD_IDS.map((id) => [id, typeof given?.[id] === "boolean" ? given[id] : base.fields[id]] as const),
-  ) as Record<FieldId, boolean>;
+  const fields = buildFields((id) => {
+    const value = given?.[id];
+    return typeof value === "boolean" ? value : base.fields[id];
+  });
   return { fields };
 }
 

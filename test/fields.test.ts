@@ -52,6 +52,7 @@ test("mergeConfig: an old config with no statusline block gets every default", (
 });
 
 test("mergeConfig: keeps valid switches, ignores unknown ids and non-booleans", () => {
+  // `as never`: the whole point is to feed values the types forbid, as a hand-edited config file would.
   const merged = mergeConfig(DEFAULT_CONFIG, {
     statusline: { fields: { context: false, model: "yes", bogus: true } },
   } as never);
